@@ -4,9 +4,8 @@ Porting and enhancing Anthony's https://github.com/anthonywong555/temporal-groce
 
 Work in progress.
 
-* Search stores workflow ([`deal_finder_workflow.py`](workflows/deal_finder_workflow.py)) is stubbed with ([`deal_finder_activities.py`](activities/deal_finder_activities.py)) activities for now.
+* Search groceries workflow ([`deal_finder_workflow.py`](workflows/deal_finder_workflow.py)) uses ([`deal_finder_activities.py`](activities/deal_finder_activities.py)) activities for now.
 * Sample grocery data ([`pinecone/grocery_data/`](pinecone/grocery_data/)) is loaded into Pinecone ([`pinecone/preload_vector_data.py`](pinecone/preload_vector_data.py)).
-* You can test the Retrieval-Augmented Generation (RAG) setup by searching for groceries ([`pinecone/search_groceries.py`](pinecone/search_groceries.py)).
 
 For more details see below.
 
@@ -48,7 +47,7 @@ See the [Temporal documentation](https://learn.temporal.io/getting_started/pytho
 
 ## Running the Application
 
-This runs a stubbed-out version of the [retrieveFood workflow](https://github.com/anthonywong555/temporal-grocery-search-deals/blob/main/apps/worker/src/workflows/ai/retrieveFood.ts).
+This runs a Python version of the [Typescript-based retrieveFood workflow](https://github.com/anthonywong555/temporal-grocery-search-deals/blob/main/apps/worker/src/workflows/ai/retrieveFood.ts).
 
 ### Prerequisites
 
@@ -157,8 +156,6 @@ You can also be fuzzy with your query:
 # A more interesting query
 uv run python -m scripts.run_workflow --query "to eat hummus with"
 ```
-
-* Workflow runs with stubbed (no nothing) activities for now.
 
 ## TODO
 Things I'm doing next
