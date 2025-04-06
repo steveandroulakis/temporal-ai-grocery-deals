@@ -203,10 +203,6 @@ class DealFinderActivities:
             activity.logger.info("--- RAW LLM RESPONSE END ---")
             # --- NEW: Log the raw response very clearly --- END
             
-            # --- Debugging: Log raw response content --- START
-            activity.logger.info(f"Raw OpenAI response content: {response_content}")
-            # --- Debugging: Log raw response content --- END
-            
             if response_content is None:
                  activity.logger.warning("OpenAI returned None content.")
                  response_content = "[]" # Default to empty JSON array string if OpenAI returns None
