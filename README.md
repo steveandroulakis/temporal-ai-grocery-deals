@@ -79,15 +79,6 @@ Load the sample grocery data (located in `pinecone/grocery_data`):
 uv run python pinecone/preload_vector_data.py
 ```
 
-You can test the Retrieval-Augmented Generation (RAG) setup by searching for groceries:
-
-```bash
-uv run python pinecone/search_groceries.py "milk"
-uv run python pinecone/search_groceries.py "citrus"
-```
-
-And you should see results!
-
 ### Running the Workflow
 
 Run the following commands in separate terminal windows:
