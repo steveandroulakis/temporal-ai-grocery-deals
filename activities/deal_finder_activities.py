@@ -78,7 +78,7 @@ class DealFinderActivities:
             raise # Re-raise
 
     @activity.defn
-    async def llm_generate(self, model: str, prompt: str, system: Optional[str] = None, format_hint: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    async def llm_generate(self, model: str, prompt: str, system: Optional[str] = None, format_hint: Optional[Dict[str, Any]] = None) -> Dict[str, List[Dict[str, Any]]]:
         """
         Activity using OpenAI to generate text based on the prompt.
         Supports system messages and JSON mode if format_hint={'type': 'json_object'} is provided.
@@ -114,72 +114,81 @@ class DealFinderActivities:
             completion = client.chat.completions.create(**request_params) # Use prepared params
 
             response_content = completion.choices[0].message.content
+            
+            # --- NEW: Log the raw response very clearly --- START
+            activity.logger.info("--- RAW LLM RESPONSE START ---")
+            activity.logger.info(response_content)
+            activity.logger.info("--- RAW LLM RESPONSE END ---")
+            # --- NEW: Log the raw response very clearly --- END
+            
             # --- Debugging: Log raw response content --- START
             activity.logger.info(f"Raw OpenAI response content: {response_content}")
             # --- Debugging: Log raw response content --- END
             
             if response_content is None:
                  activity.logger.warning("OpenAI returned None content.")
-                 response_content = "[]" # Default to empty JSON array string
+                 response_content = "[]" # Default to empty JSON array string if OpenAI returns None
             else:
-                activity.logger.info(f"Successfully generated raw response with length {len(response_content)}")
-                
-                # --- Clean and Parse JSON --- START
-                cleaned_content = response_content.strip()
-                # Remove potential markdown fences (```json ... ``` or ``` ... ```)
-                if cleaned_content.startswith("```") and cleaned_content.endswith("```"):
-                    # Find the first newline after ```
-                    first_newline = cleaned_content.find('\\n')
-                    if first_newline != -1:
-                         # Remove ```json\n or ```\n
-                         cleaned_content = cleaned_content[first_newline + 1:-3].strip()
+                # Minimal cleaning - just strip whitespace
+                response_content = response_content.strip()
+                activity.logger.info(f"Returning stripped response content with length {len(response_content)}")
+                # NOTE: Removed complex JSON cleaning/parsing/re-serialization block.
+                # The workflow is now responsible for parsing this string (which should be JSON).
+
+            # --- Attempt to parse the LLM response string into a Python list --- START
+            parsed_response: List[Dict[str, Any]] = [] # Default to empty list
+            try:
+                parsed_obj = json.loads(response_content)
+
+                if isinstance(parsed_obj, list):
+                    # Handles [...] and []
+                    # Check if all items are dicts and have the required keys
+                    if all(isinstance(item, dict) and 'name' in item and 'price' in item for item in parsed_obj):
+                        parsed_response = parsed_obj
+                        activity.logger.info(f"Successfully parsed LLM response into a list of {len(parsed_response)} dicts.")
                     else:
-                         # Handle case like ```json[...]``` without newline
-                         cleaned_content = cleaned_content.split('```', 1)[1].rsplit('```', 1)[0].strip()
+                        activity.logger.warning("Parsed JSON list did not contain only dictionaries with 'name' and 'price' keys. Returning empty list.")
+                        parsed_response = [] # Keep strict: require name/price
 
-                activity.logger.info(f"Cleaned response content attempt: {cleaned_content}")
-
-                try:
-                    parsed_obj = json.loads(cleaned_content)
-                    extracted_list = None # Variable to hold the list we want
-
-                    if isinstance(parsed_obj, list):
-                        extracted_list = parsed_obj
-                        activity.logger.info("Parsed JSON is already a list.")
-                    elif isinstance(parsed_obj, dict):
-                        activity.logger.info("Parsed JSON is a dictionary. Attempting to extract list...")
-                        # Check common keys where the list might be nested
-                        possible_keys = ['matches', 'response', 'items', 'results'] # Added 'results'
-                        for key in possible_keys:
-                            if isinstance(parsed_obj.get(key), list):
-                                extracted_list = parsed_obj[key]
-                                activity.logger.info(f"Extracted list from dictionary key: '{key}'")
-                                break
-                        # If not found in common keys, check if it's a single-key dict with a list value
-                        if extracted_list is None and len(parsed_obj) == 1:
-                            first_value = list(parsed_obj.values())[0]
-                            if isinstance(first_value, list):
-                                extracted_list = first_value
-                                activity.logger.info("Extracted list from single-key dictionary value.")
-
-                    # Process the extracted list if found
-                    if extracted_list is not None:
-                        # Ensure all items in the list are strings, as expected by workflow
-                        stringified_list = [str(item) for item in extracted_list]
-                        # Re-serialize just the list
-                        response_content = json.dumps(stringified_list)
-                        activity.logger.info(f"Successfully processed extracted list. Final JSON string: {response_content}")
+                elif isinstance(parsed_obj, dict):
+                    # Handles the case where LLM returns just one item as an object {}
+                    if 'name' in parsed_obj and 'price' in parsed_obj:
+                        activity.logger.info("Parsed LLM response as a single dictionary, wrapping it in a list.")
+                        parsed_response = [parsed_obj]
                     else:
-                        activity.logger.warning(f"Could not extract a list from parsed JSON (Type: {type(parsed_obj)}). Returning empty list string.")
-                        response_content = "[]" # Default to empty list if extraction fails
+                        # NEW: Check if dict contains a key whose value is the desired list of dicts
+                        found_list_in_dict = False
+                        for key, value in parsed_obj.items():
+                            # Check if the value is a list, and all its items are dicts with 'name' and 'price'
+                            if isinstance(value, list) and all(isinstance(item, dict) and 'name' in item and 'price' in item for item in value):
+                                activity.logger.info(f"Found expected list of dicts under key '{key}' in the response object.")
+                                parsed_response = value
+                                found_list_in_dict = True
+                                break # Use the first suitable list found
+                        
+                        if not found_list_in_dict:
+                           activity.logger.warning("Parsed dictionary object was not a single item with name/price and did not contain a recognized nested list of items. Returning empty list.")
+                           parsed_response = []
 
-                except json.JSONDecodeError:
-                    activity.logger.error(f"Cleaned response was still not valid JSON: {cleaned_content}. Returning empty list string.")
-                    response_content = "[]" # Return empty JSON array string on decode error
-                # --- Clean and Parse JSON --- END
+                # Commenting out the very specific nested string case for simplicity unless proven necessary
+                # elif isinstance(parsed_obj, list) and len(parsed_obj) == 1 and isinstance(parsed_obj[0], str):
+                #    ... (removed nested parsing logic) ...
 
-            # Return the processed JSON string (should now always be a string representing a list)
-            return {"response": response_content}
+                else:
+                    # If it's not a list or a dict we can handle, log warning and return empty
+                    activity.logger.warning(f"LLM JSON response was not a list or a recognized dictionary structure (Type: {type(parsed_obj)}). Returning empty list.")
+                    parsed_response = [] # Explicitly set default
+
+            except json.JSONDecodeError as json_err:
+                activity.logger.error(f"Failed to parse LLM response string as JSON: {json_err}. Response: {response_content}")
+                parsed_response = [] # Ensure [] on JSON error
+            except Exception as e:
+                 activity.logger.error(f"Unexpected error during final response parsing: {e}. Returning empty list.")
+                 parsed_response = [] # Ensure [] on other errors
+            # --- Attempt to parse the LLM response string into a Python list --- END
+
+            # Return the parsed Python list (or empty list on failure)
+            return {"response": parsed_response}
 
         except OpenAIError as e:
             activity.logger.error(f"OpenAI API error during chat completion: {e}")

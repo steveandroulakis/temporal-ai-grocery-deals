@@ -1,5 +1,7 @@
 import asyncio
 import uuid
+import argparse  # Add argparse import
+import sys  # Add sys import for argument checking
 from temporalio.client import Client
 
 # Import the workflow definition and its input type
@@ -9,16 +11,31 @@ from shared.config import get_temporal_client, TEMPORAL_TASK_QUEUE
 
 
 async def main():
+    # --- Setup Argument Parser ---
+    parser = argparse.ArgumentParser(description="Run the Deal Finder Temporal Workflow.")
+    parser.add_argument(
+        "--query",
+        type=str,
+        default="pasta",
+        help="The search query for grocery items (default: 'pasta')."
+    )
+    args = parser.parse_args()
+
+    # Check if default query is used and print message
+    query_to_use = args.query
+    if query_to_use == "pasta" and not any(arg.startswith('--query') for arg in sys.argv):
+         print("No query provided via --query argument. Using default: 'pasta'")
+
+
     # Create a Temporal client
     client = await get_temporal_client()
 
     # --- Define the input for the DealFinderWorkflow ---
-    # Since activities are stubbed, specific model names may not matter yet.
-    # Replace with actual desired values when integrating real services.
+    # Use the query from arguments
     workflow_input = RetrieveItemWorkflowRequest(
         llmEmbeddingModel="text-embedding-3-small", # OpenAI embedding model
         llmModel="gpt-4o" , # OpenAI LLM
-        query="penne pasta",           # Example search query
+        query=query_to_use, # Use query from args
         # Example PineconeDB index names (e.g., store names) - Use exact names from data
         pineconeDBIndexes=["Safeway", "Trader Joe's", "Whole Foods"] # Changed store names
     )

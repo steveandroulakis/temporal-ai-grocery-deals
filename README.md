@@ -101,7 +101,11 @@ uv run python -m scripts.run_worker
 
 2. Start the Temporal workflow:
 ```bash
-uv run python -m scripts.run_workflow
+# Example query
+uv run python -m scripts.run_workflow --query "pasta"
+
+# A more interesting query
+uv run python -m scripts.run_workflow --query "crackers and other things that go great with hummus"
 ```
 
 * Workflow runs with stubbed (no nothing) activities for now.

@@ -127,122 +127,54 @@ class DealFinderWorkflow:
                 })
                 continue
 
-            # Construct LLM prompt
-            items_str = "\\n- ".join(possible_items)
-            # Add the original query to the prompt for context
+            # Construct LLM prompt for structured JSON output
+            # Format the items clearly for the LLM
+            formatted_items_list = "\n".join([f"- {item}" for item in possible_items])
             llm_prompt = (
-                f"You are an AI assistant filtering grocery items based on a user query.\n"
-                f"User query: \"{query}\"\n\n" # Explicitly include the original user query
-                f"Below is a list of potential grocery items (name and deal/price) retrieved for this query:\n"
-                f"- {items_str}\n\n"
-                f"Instructions:\n"
-                f"1. Carefully review the 'User query'.\n"
-                f"2. From the list above, select ONLY the strings that are directly relevant to the 'User query'.\n"
-                f"3. Return the EXACT selected strings, without modification.\n"
-                f"4. Respond with a JSON array containing ONLY the selected strings. \n"
+                f"You are an AI assistant tasked with extracting relevant grocery items and their prices from a list based on a user query.\\n"
+                f"User query: \"{query}\"\\n\\n"
+                f"Below is a list of potential grocery items retrieved for this query. Each item string might contain the name, size/quantity, and price/deal information.\\n"
+                f"{formatted_items_list}\\n\\n" # Use the clearly formatted list
+                f"Instructions:\\n"
+                f"1. Carefully review the 'User query'.\\n"
+                f"2. From the list above, identify ONLY the items that are directly relevant to the 'User query'.\\n"
+                f"3. For each relevant item, extract its primary name and its price (as a string, e.g., '1.99' or '5.49/lb'). \\n"
+                f"   - Extract the price value found within the item string. If a price isn't clearly available for an item, use null for the price field.\\n"
+                f"   - Extract just the core name of the item, omitting sizes or secondary details unless crucial for identification.\\n"
+                f"4. Respond with a JSON array of objects. Each object must have two keys: 'name' (string) and 'price' (string or null).\\n"
                 f"5. If NONE of the items in the list are relevant to the query, return an empty JSON array ([])."
             )
+
+            # Define the expected JSON schema for the LLM output
+            llm_output_schema = {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "price": {"type": ["string", "null"]}
+                    },
+                    "required": ["name", "price"]
+                }
+            }
 
             try:
                 workflow.logger.info(f"Calling LLM for store filter: {store_tag}")
                 llm_response = await workflow.execute_activity(
                     DealFinderActivities.llm_generate,
-                    # Pass system prompt and format hint positionally
-                    args=[llm_model, llm_prompt, "You are a helpful AI assistant. Respond in JSON format.", {"type": "array", "items": {"type": "string"}}],
+                    # Pass system prompt and the structured format hint positionally
+                    args=[llm_model, llm_prompt, "You are a helpful AI assistant. Respond ONLY with the requested JSON.", llm_output_schema],
                     **activity_options
                 )
-                results_str = llm_response['response']
-                filter_results: List[str]
+                # The activity now returns the parsed list directly
+                llm_extracted_items = llm_response['response'] 
 
-                try:
-                    filter_results = json.loads(results_str)
-                    workflow.logger.info(f"LLM response parsed successfully for {store_tag}")
-                except json.JSONDecodeError:
-                    workflow.logger.warning(f"LLM response for {store_tag} was not valid JSON. Attempting repair...")
-                    repaired_json = await workflow.execute_activity(
-                        DealFinderActivities.json_repair,
-                        args=[results_str],
-                         **activity_options
-                    )
-                    try:
-                         filter_results = json.loads(repaired_json)
-                         workflow.logger.info(f"JSON repair successful for {store_tag}")
-                    except json.JSONDecodeError:
-                         workflow.logger.error(f"JSON repair failed for {store_tag}. Skipping results.")
-                         filter_results = []
-
-                # Remove duplicates
-                filter_results = list(set(filter_results))
-
-                # Refine results: Find metadata, handle misses with reverse search
-                refined_items: List[GroceryItem] = []
-                for item_str in filter_results:
-                    # Direct find: Check if the metadata name is part of the LLM result string.
-                    # This handles cases where LLM includes price/deal info in the string.
-                    found_item = next((meta for meta in metadata_list 
-                                       if isinstance(meta, dict) 
-                                       and meta.get('name') 
-                                       and meta['name'] in item_str), None)
-
-                    if found_item:
-                        # Ensure price exists in found metadata, parsing from item_str if necessary
-                        if 'price' not in found_item or not found_item.get('price'):
-                            try:
-                                # Attempt to parse price from the end of item_str (e.g., "... (x.xx)")
-                                price_part = item_str.split('(')[-1].split(')')[0]
-                                found_item['price'] = str(parse_price(price_part)) # Store as string for consistency
-                                workflow.logger.info(f"Parsed price '{found_item['price']}' from item_str '{item_str}' for direct match.")
-                            except (IndexError, ValueError):
-                                workflow.logger.warning(f"Could not parse price from item_str '{item_str}' for direct match.")
-                                # Price remains missing or invalid, sort function will handle it.
-                        
-                        refined_items.append(found_item)
-                    else:
-                        workflow.logger.info(f"Item matching '{item_str}' not found directly in metadata for {store_tag}. Attempting reverse search (with filter).")
-                        # Item Embedding
-                        item_embedding_result = await workflow.execute_activity(
-                            DealFinderActivities.llm_embed,
-                            args=[llm_embedding_model, item_str],
-                             **activity_options
-                        )
-                        item_embedding = item_embedding_result['embeddings']
-
-                        # Reverse search - Apply the store filter tag positionally
-                        item_query_response = await workflow.execute_activity(
-                            DealFinderActivities.pinecone_query,
-                            # Pass arguments positionally: item_embedding, n_results=1, store_tag
-                            args=[item_embedding, 1, store_tag],
-                            **activity_options
-                        )
-
-                        # Process reverse search results
-                        reverse_found_meta_list = item_query_response.get('metadatas', [[[]]])[0]
-                        if reverse_found_meta_list and isinstance(reverse_found_meta_list[0], dict):
-                             reverse_found_item = reverse_found_meta_list[0]
-                             if reverse_found_item.get('store') == store_tag:
-                                 workflow.logger.info(f"Reverse search found item for '{item_str}' in {store_tag}")
-                                 # Ensure price exists in found metadata, parsing from item_str if necessary
-                                 if 'price' not in reverse_found_item or not reverse_found_item.get('price'):
-                                      try:
-                                          price_part = item_str.split('(')[-1].split(')')[0]
-                                          reverse_found_item['price'] = str(parse_price(price_part))
-                                          workflow.logger.info(f"Parsed price '{reverse_found_item['price']}' from item_str '{item_str}' for reverse match.")
-                                      except (IndexError, ValueError):
-                                          workflow.logger.warning(f"Could not parse price from item_str '{item_str}' for reverse match.")
-
-                                 refined_items.append(reverse_found_item) # Append the found item
-                             else:
-                                 workflow.logger.warning(f"Reverse search for '{item_str}' found item, but store tag mismatch (expected {store_tag}, got {reverse_found_item.get('store')}). Skipping.")
-                        else:
-                            workflow.logger.warning(f"Reverse search failed for item '{item_str}' in {store_tag}")
-
-                # Sort final items by price
-                sorted_results = sort_items_by_price(refined_items)
-                workflow.logger.info(f"Processed {len(sorted_results)} items for store filter {store_tag}")
+                # Append the results for this store tag
                 final_results_per_index.append({
-                    "results": sorted_results,
-                    "collection": store_tag # Use store_tag as collection identifier
+                    "results": llm_extracted_items,
+                    "collection": store_tag
                 })
+                workflow.logger.info(f"Successfully processed LLM results for store filter: {store_tag}")
 
             except Exception as e:
                 workflow.logger.error(f"Error processing LLM results for store filter {store_tag}: {e}")
