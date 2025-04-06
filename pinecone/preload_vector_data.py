@@ -19,7 +19,7 @@ DATA_DIR = "pinecone/grocery_data"
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSION = 768  # Must match DIMENSION in docker-compose.yaml
 BATCH_SIZE = 32 # Process items in batches for efficiency
-INDEX_NAME = "store-items" # Define the single index name
+# INDEX_NAME = "store-items" # Define the single index name - Now read from ENV
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -157,6 +157,12 @@ def main():
     if not openai_api_key:
         logging.error(f"Error: OPENAI_API_KEY not found in environment variables or {dotenv_path}.")
         exit(1)
+    # Read Pinecone Index Name from environment
+    pinecone_index_name = os.environ.get("PINECONE_INDEX_NAME")
+    if not pinecone_index_name:
+        logging.error(f"Error: PINECONE_INDEX_NAME not found in environment variables or {dotenv_path}.")
+        exit(1)
+    logging.info(f"Using Pinecone index name: {pinecone_index_name}")
 
     # 2. Initialize OpenAI Client
     logging.info("Initializing OpenAI client...")
@@ -171,11 +177,11 @@ def main():
 
     # 3. Load Docker Compose Config for the single service
     services = load_config(docker_compose_full_path)
-    if INDEX_NAME not in services:
-        logging.error(f"Error: Service '{INDEX_NAME}' not found in {docker_compose_full_path}.")
+    if pinecone_index_name not in services:
+        logging.error(f"Error: Service '{pinecone_index_name}' not found in {docker_compose_full_path}.")
         exit(1)
-    service_config = services[INDEX_NAME]
-    logging.info(f"Found configuration for service '{INDEX_NAME}'.")
+    service_config = services[pinecone_index_name]
+    logging.info(f"Found configuration for service '{pinecone_index_name}'.")
 
     # Extract port for the single service
     port = None
@@ -183,23 +189,23 @@ def main():
         port_mapping = service_config['ports'][0]
         try:
             port = int(port_mapping.split(':')[0])
-            logging.info(f"Using host port mapping for '{INDEX_NAME}': {port}")
+            logging.info(f"Using host port mapping for '{pinecone_index_name}': {port}")
         except (ValueError, IndexError, TypeError):
-            logging.error(f"Could not parse host port from '{port_mapping}' for {INDEX_NAME}.")
+            logging.error(f"Could not parse host port from '{port_mapping}' for {pinecone_index_name}.")
             exit(1)
     else:
-        logging.error(f"No port mapping found for service {INDEX_NAME} in {docker_compose_full_path}.")
+        logging.error(f"No port mapping found for service {pinecone_index_name} in {docker_compose_full_path}.")
         exit(1)
 
     # Dimension check
     try:
         config_dimension = int(service_config.get('environment', {}).get('DIMENSION'))
         if config_dimension != EMBEDDING_DIMENSION:
-             logging.warning(f"Dimension mismatch for {INDEX_NAME}. Config: {config_dimension}, Script: {EMBEDDING_DIMENSION}. Using script dimension {EMBEDDING_DIMENSION}.")
+             logging.warning(f"Dimension mismatch for {pinecone_index_name}. Config: {config_dimension}, Script: {EMBEDDING_DIMENSION}. Using script dimension {EMBEDDING_DIMENSION}.")
     except (ValueError, TypeError):
-         logging.warning(f"Could not read or parse DIMENSION from environment for {INDEX_NAME}. Assuming {EMBEDDING_DIMENSION}.")
+         logging.warning(f"Could not read or parse DIMENSION from environment for {pinecone_index_name}. Assuming {EMBEDDING_DIMENSION}.")
     except Exception as e:
-         logging.warning(f"Error reading dimension for {INDEX_NAME}: {e}. Assuming {EMBEDDING_DIMENSION}.")
+         logging.warning(f"Error reading dimension for {pinecone_index_name}: {e}. Assuming {EMBEDDING_DIMENSION}.")
 
 
     # 4. Load All Chunk Data from JSON files in the data directory
@@ -224,7 +230,7 @@ def main():
 
     # 5. Connect to the Single Pinecone Instance using gRPC client with plaintext
     pinecone_grpc_host = f"localhost:{port}"
-    logging.info(f"Attempting to connect to single Pinecone index '{INDEX_NAME}' via gRPC (plaintext) at {pinecone_grpc_host}...")
+    logging.info(f"Attempting to connect to single Pinecone index '{pinecone_index_name}' via gRPC (plaintext) at {pinecone_grpc_host}...")
 
     pc = None
     index = None
@@ -233,34 +239,34 @@ def main():
         pc = Pinecone(api_key="dummy-key", host=pinecone_grpc_host, plaintext=True)
 
         # Directly attempt to get the index object handle, assuming it exists
-        logging.info(f"Attempting to directly get gRPC index handle for '{INDEX_NAME}' at host {pinecone_grpc_host}...")
+        logging.info(f"Attempting to directly get gRPC index handle for '{pinecone_index_name}' at host {pinecone_grpc_host}...")
         index = pc.Index(
-            name=INDEX_NAME,
+            name=pinecone_index_name,
             host=pinecone_grpc_host,
             grpc_config=GRPCClientConfig(secure=False) # Explicitly disable TLS for data operations
         )
-        logging.info(f"Successfully obtained gRPC index handle for '{INDEX_NAME}'.")
+        logging.info(f"Successfully obtained gRPC index handle for '{pinecone_index_name}'.")
         # Optional: Describe index stats
         try:
              stats = index.describe_index_stats()
-             logging.info(f"Initial Index '{INDEX_NAME}' stats: {stats}")
+             logging.info(f"Initial Index '{pinecone_index_name}' stats: {stats}")
         except Exception as desc_e:
-             logging.warning(f"Could not describe_index_stats for {INDEX_NAME}: {desc_e}")
+             logging.warning(f"Could not describe_index_stats for {pinecone_index_name}: {desc_e}")
 
     except Exception as e:
-        logging.error(f"Error connecting to or preparing index '{INDEX_NAME}' via gRPC at {pinecone_grpc_host}: {e}")
+        logging.error(f"Error connecting to or preparing index '{pinecone_index_name}' via gRPC at {pinecone_grpc_host}: {e}")
         if pc: del pc
         exit(1) # Exit if connection fails
 
     if not index:
-        logging.error(f"Failed to get a valid gRPC index object for '{INDEX_NAME}'. Skipping upserts.")
+        logging.error(f"Failed to get a valid gRPC index object for '{pinecone_index_name}'. Skipping upserts.")
         exit(1)
 
     # 6. Process and Upsert Chunk Data in Batches
-    logging.info(f"Processing {len(all_chunks)} total chunks for upsertion into '{INDEX_NAME}'...")
+    logging.info(f"Processing {len(all_chunks)} total chunks for upsertion into '{pinecone_index_name}'...")
     total_chunks_processed = 0
     try:
-        for i in tqdm(range(0, len(all_chunks), BATCH_SIZE), desc=f"Upserting chunks to {INDEX_NAME}", unit="batch"):
+        for i in tqdm(range(0, len(all_chunks), BATCH_SIZE), desc=f"Upserting chunks to {pinecone_index_name}", unit="batch"):
             batch_chunks = all_chunks[i : i + BATCH_SIZE]
             if not batch_chunks: continue
 
@@ -305,14 +311,14 @@ def main():
         # Get final stats after processing
         try:
             final_stats = index.describe_index_stats()
-            logging.info(f"Final Index '{INDEX_NAME}' stats: {final_stats}")
+            logging.info(f"Final Index '{pinecone_index_name}' stats: {final_stats}")
         except Exception as stats_e:
-            logging.warning(f"Could not get final stats for index '{INDEX_NAME}': {stats_e}")
+            logging.warning(f"Could not get final stats for index '{pinecone_index_name}': {stats_e}")
 
         # Clean up Pinecone client connection
         if pc:
             del pc
-            logging.debug(f"Pinecone client object for {INDEX_NAME} deleted.")
+            logging.debug(f"Pinecone client object for {pinecone_index_name} deleted.")
 
 
     end_time = time.time()

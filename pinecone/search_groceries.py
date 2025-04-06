@@ -15,7 +15,7 @@ DOCKER_COMPOSE_PATH = "pinecone/docker-compose.yaml"
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSION = 768
 TOP_K = 5 # Number of results to return
-INDEX_NAME = "store-items" # Define the single index name
+# INDEX_NAME = "store-items" # Define the single index name - Read from ENV
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -64,7 +64,9 @@ def generate_single_embedding(client: OpenAI, text: str) -> list[float]:
 
 def search_index(index: Index, query_embedding: list[float], top_k: int, filter_dict: Optional[dict] = None):
     """Performs a query against the Pinecone index, optionally filtering by metadata."""
-    logging.info(f"Querying index '{INDEX_NAME}' with top_k={top_k} and filter={filter_dict}...")
+    # Get index name from the index object itself for logging
+    index_name = index.name if index and hasattr(index, 'name') else '[unknown_index]'
+    logging.info(f"Querying index '{index_name}' with top_k={top_k} and filter={filter_dict}...")
     try:
         query_response: QueryResponse = index.query(
             vector=query_embedding,
@@ -75,7 +77,7 @@ def search_index(index: Index, query_embedding: list[float], top_k: int, filter_
         )
         return query_response.matches
     except Exception as e:
-        logging.error(f"Error querying index '{INDEX_NAME}': {e}")
+        logging.error(f"Error querying index '{index_name}': {e}")
         return []
 
 # --- Main Execution ---
@@ -106,6 +108,12 @@ def main():
     if not openai_api_key:
         logging.error(f"Error: OPENAI_API_KEY not found in environment variables or {dotenv_path}. Exiting.")
         exit(1)
+    # Read Pinecone Index Name from environment
+    pinecone_index_name = os.environ.get("PINECONE_INDEX_NAME")
+    if not pinecone_index_name:
+        logging.error(f"Error: PINECONE_INDEX_NAME not found in environment variables or {dotenv_path}. Exiting.")
+        exit(1)
+    logging.info(f"Using Pinecone index name: {pinecone_index_name}")
 
     # 2. Initialize OpenAI Client
     logging.info("Initializing OpenAI client...")
@@ -126,7 +134,7 @@ def main():
         exit(1)
 
     # 4. Load Docker Compose Config for the single service
-    service_config = load_single_service_config(docker_compose_full_path, INDEX_NAME)
+    service_config = load_single_service_config(docker_compose_full_path, pinecone_index_name)
 
     # Extract port
     port = None
@@ -134,12 +142,12 @@ def main():
         port_mapping = service_config['ports'][0]
         try:
             port = int(port_mapping.split(':')[0])
-            logging.info(f"Connecting to Pinecone service '{INDEX_NAME}' via port {port}")
+            logging.info(f"Connecting to Pinecone service '{pinecone_index_name}' via port {port}")
         except (ValueError, IndexError, TypeError):
-            logging.error(f"Could not parse host port for {INDEX_NAME}. Exiting.")
+            logging.error(f"Could not parse host port for {pinecone_index_name}. Exiting.")
             exit(1)
     else:
-        logging.error(f"No port mapping found for service {INDEX_NAME}. Exiting.")
+        logging.error(f"No port mapping found for service {pinecone_index_name}. Exiting.")
         exit(1)
 
     # 5. Connect to the single Pinecone Instance
@@ -147,14 +155,14 @@ def main():
     pc = None
     index = None
     try:
-        logging.info(f"Connecting to index '{INDEX_NAME}' via gRPC (plaintext) at {pinecone_grpc_host}...")
+        logging.info(f"Connecting to index '{pinecone_index_name}' via gRPC (plaintext) at {pinecone_grpc_host}...")
         pc = Pinecone(api_key="dummy-key", host=pinecone_grpc_host, plaintext=True)
         index = pc.Index(
-            name=INDEX_NAME,
+            name=pinecone_index_name,
             host=pinecone_grpc_host,
             grpc_config=GRPCClientConfig(secure=False)
         )
-        logging.info(f"Successfully obtained index handle for '{INDEX_NAME}'.")
+        logging.info(f"Successfully obtained index handle for '{pinecone_index_name}'.")
 
         # 6. Prepare Filter
         query_filter = None
@@ -188,7 +196,7 @@ def main():
         # Clean up client connection
         if pc:
             del pc
-            logging.debug(f"Pinecone client object for {INDEX_NAME} deleted.")
+            logging.debug(f"Pinecone client object for {pinecone_index_name} deleted.")
 
     end_time = time.time()
     logging.info(f"\nSearch script finished in {end_time - start_time:.2f} seconds.")

@@ -57,10 +57,10 @@ def parse_price(price_str: Any) -> float:
         return float('inf')
 
 def sort_items_by_price(items: List[GroceryItem]) -> List[GroceryItem]:
-    """Sorting function (low to high)."""
-    # Filter out items without a 'price' key before sorting
-    items_with_price = [item for item in items if item and 'price' in item]
-    return sorted(items_with_price, key=lambda item: parse_price(item.get('price', 'inf')))
+    """Sorting function (low to high), handles missing prices."""
+    # Directly sort, using parse_price which handles missing/invalid prices by returning infinity
+    # No longer filter out items missing the 'price' key beforehand.
+    return sorted(items, key=lambda item: parse_price(item.get('price') if item else None))
 
 # --- Workflow Definition ---
 
@@ -73,100 +73,82 @@ class DealFinderWorkflow:
         llm_embedding_model = request['llmEmbeddingModel']
         llm_model = request['llmModel']
         query = request['query']
-        pinecone_db_indexes = request['pineconeDBIndexes']
+        # These are now treated as logical store names/filter tags
+        store_filter_tags = request['pineconeDBIndexes']
 
-        indexes_data = []
-
-        # 1. Get Pinecone Indexes
-        workflow.logger.info(f"Retrieving indexes: {pinecone_db_indexes}")
-        for index_name in pinecone_db_indexes:
-            try:
-                index_obj = await workflow.execute_activity(
-                    DealFinderActivities.pinecone_get_index,
-                    args=[index_name],
-                    **activity_options
-                )
-                indexes_data.append({
-                    "pineconeDBIndex": index_name,
-                    "index": index_obj
-                })
-                workflow.logger.info(f"Successfully retrieved index: {index_name}")
-            except Exception as e:
-                workflow.logger.error(f"Failed to get index {index_name}: {e}")
-                # Decide how to handle failure: skip index, fail workflow, etc.
-                # Here, we'll just log and skip this index.
-                continue
-
-        # 2. Get Query Embedding
+        # 1. Get Query Embedding
         workflow.logger.info(f"Generating embedding for query: {query}")
         embedding_result = await workflow.execute_activity(
-            DealFinderActivities.ollama_embed,
+            DealFinderActivities.llm_embed,
             args=[llm_embedding_model, query],
             **activity_options
         )
         query_embedding = embedding_result['embeddings']
 
-        # 3. Query each index
-        workflow.logger.info("Querying indexes with embedding...")
-        query_results = []
-        for data in indexes_data:
+        # 2. Query the single index for each store filter
+        workflow.logger.info(f"Querying single index with store filters: {store_filter_tags}")
+        query_results_by_store = {}
+        for store_tag in store_filter_tags:
             try:
                 query_response = await workflow.execute_activity(
                     DealFinderActivities.pinecone_query,
-                    args=[data['index'], query_embedding], # Pass args as a list
-                    # Assuming default n_results=10 is acceptable, or pass explicitly:
-                    # args=[data['index'], query_embedding, 10],
+                    # Pass arguments positionally: embeddings, n_results (using default 10), store_tag
+                    args=[query_embedding, 10, store_tag],
                     **activity_options
                 )
-                # The stub returns empty lists, so these will be empty in testing
+                # Store results keyed by the store tag
                 possible_items = query_response.get('documents', [[]])[0]
                 metadata = query_response.get('metadatas', [[]])[0]
-                query_results.append({
-                    **data,
+                query_results_by_store[store_tag] = {
                     "metadata": metadata,
                     "possibleItems": possible_items
-                })
-                workflow.logger.info(f"Query successful for index: {data['pineconeDBIndex']}")
+                }
+                workflow.logger.info(f"Query successful for store filter: {store_tag}")
             except Exception as e:
-                workflow.logger.error(f"Failed to query index {data['pineconeDBIndex']}: {e}")
-                # Skip this index on query failure
+                workflow.logger.error(f"Failed to query with store filter {store_tag}: {e}")
+                # Store empty results for this tag on failure
+                query_results_by_store[store_tag] = {"metadata": [], "possibleItems": []}
                 continue
-        indexes_data = query_results
 
-        # 4. Process results with LLM and refine
-        workflow.logger.info("Processing results with LLM...")
+        # 3. Process results with LLM and refine
+        workflow.logger.info("Processing filtered results with LLM...")
         final_results_per_index: AllStoreResultsWorkflowResponse = []
 
-        for data in indexes_data:
-            index_name = data['pineconeDBIndex']
-            possible_items = data.get('possibleItems', [])
-            metadata_list = data.get('metadata', []) # This is expected to be List[GroceryItem]
+        # Iterate through the results we stored, keyed by store_tag
+        for store_tag, query_data in query_results_by_store.items():
+            possible_items = query_data.get('possibleItems', [])
+            metadata_list = query_data.get('metadata', [])
 
             if not possible_items:
-                workflow.logger.warn(f"No possible items found from PineconeDB query for index {index_name}. Skipping LLM step.")
+                workflow.logger.warning(f"No possible items found from PineconeDB query for store filter {store_tag}. Skipping LLM step.")
                 final_results_per_index.append({
                     "results": [],
-                    "collection": index_name # Keep 'collection' key for StoreResult compatibility
+                    "collection": store_tag # Use store_tag as collection identifier
                 })
                 continue
 
-            # Construct LLM prompt (similar to TypeScript)
-            items_str = "\n- ".join(possible_items)
+            # Construct LLM prompt
+            items_str = "\\n- ".join(possible_items)
+            # Add the original query to the prompt for context
             llm_prompt = (
-                f"You are an AI assistant helping the user find grocery items related to their query. \n"
-                f"From the list below, return only the exact strings that are relevant to the query.  \n"
-                f"Each string includes both the item name and its deal — do not change or rephrase them. \n"
-                f"Respond with an array of the matching strings from the list. If none match, return an empty array.\n"
-                f"Grocery items:\n- {items_str}"
+                f"You are an AI assistant filtering grocery items based on a user query.\n"
+                f"User query: \"{query}\"\n\n" # Explicitly include the original user query
+                f"Below is a list of potential grocery items (name and deal/price) retrieved for this query:\n"
+                f"- {items_str}\n\n"
+                f"Instructions:\n"
+                f"1. Carefully review the 'User query'.\n"
+                f"2. From the list above, select ONLY the strings that are directly relevant to the 'User query'.\n"
+                f"3. Return the EXACT selected strings, without modification.\n"
+                f"4. Respond with a JSON array containing ONLY the selected strings. \n"
+                f"5. If NONE of the items in the list are relevant to the query, return an empty JSON array ([])."
             )
 
             try:
-                workflow.logger.info(f"Calling LLM for index: {index_name}")
+                workflow.logger.info(f"Calling LLM for store filter: {store_tag}")
                 llm_response = await workflow.execute_activity(
-                    DealFinderActivities.ollama_generate,
-                    args=[llm_model, query, llm_prompt, {"type": "array", "items": {"type": "string"}}],
-                    # Note: Changed order/inclusion of args to match activity definition (model, prompt, system, format)
-                    # prompt=query, system=llm_prompt, format={...}
+                    DealFinderActivities.llm_generate,
+                    # Pass system prompt and format hint positionally
+                    args=[llm_model, llm_prompt, "You are a helpful AI assistant. Respond in JSON format.", {"type": "array", "items": {"type": "string"}}],
                     **activity_options
                 )
                 results_str = llm_response['response']
@@ -174,9 +156,9 @@ class DealFinderWorkflow:
 
                 try:
                     filter_results = json.loads(results_str)
-                    workflow.logger.info(f"LLM response parsed successfully for {index_name}")
+                    workflow.logger.info(f"LLM response parsed successfully for {store_tag}")
                 except json.JSONDecodeError:
-                    workflow.logger.warn(f"LLM response for {index_name} was not valid JSON. Attempting repair...")
+                    workflow.logger.warning(f"LLM response for {store_tag} was not valid JSON. Attempting repair...")
                     repaired_json = await workflow.execute_activity(
                         DealFinderActivities.json_repair,
                         args=[results_str],
@@ -184,9 +166,9 @@ class DealFinderWorkflow:
                     )
                     try:
                          filter_results = json.loads(repaired_json)
-                         workflow.logger.info(f"JSON repair successful for {index_name}")
+                         workflow.logger.info(f"JSON repair successful for {store_tag}")
                     except json.JSONDecodeError:
-                         workflow.logger.error(f"JSON repair failed for {index_name}. Skipping results.")
+                         workflow.logger.error(f"JSON repair failed for {store_tag}. Skipping results.")
                          filter_results = []
 
                 # Remove duplicates
@@ -195,51 +177,78 @@ class DealFinderWorkflow:
                 # Refine results: Find metadata, handle misses with reverse search
                 refined_items: List[GroceryItem] = []
                 for item_str in filter_results:
-                    # Direct find (simplified check)
-                    found_item = next((meta for meta in metadata_list if isinstance(meta, dict) and meta.get('name') and item_str in meta['name']), None)
+                    # Direct find: Check if the metadata name is part of the LLM result string.
+                    # This handles cases where LLM includes price/deal info in the string.
+                    found_item = next((meta for meta in metadata_list 
+                                       if isinstance(meta, dict) 
+                                       and meta.get('name') 
+                                       and meta['name'] in item_str), None)
 
                     if found_item:
+                        # Ensure price exists in found metadata, parsing from item_str if necessary
+                        if 'price' not in found_item or not found_item.get('price'):
+                            try:
+                                # Attempt to parse price from the end of item_str (e.g., "... (x.xx)")
+                                price_part = item_str.split('(')[-1].split(')')[0]
+                                found_item['price'] = str(parse_price(price_part)) # Store as string for consistency
+                                workflow.logger.info(f"Parsed price '{found_item['price']}' from item_str '{item_str}' for direct match.")
+                            except (IndexError, ValueError):
+                                workflow.logger.warning(f"Could not parse price from item_str '{item_str}' for direct match.")
+                                # Price remains missing or invalid, sort function will handle it.
+                        
                         refined_items.append(found_item)
                     else:
-                        workflow.logger.info(f"Item '{item_str}' not found directly in metadata for {index_name}. Attempting reverse search.")
+                        workflow.logger.info(f"Item matching '{item_str}' not found directly in metadata for {store_tag}. Attempting reverse search (with filter).")
                         # Item Embedding
                         item_embedding_result = await workflow.execute_activity(
-                            DealFinderActivities.ollama_embed,
+                            DealFinderActivities.llm_embed,
                             args=[llm_embedding_model, item_str],
                              **activity_options
                         )
                         item_embedding = item_embedding_result['embeddings']
 
-                        # Reverse search
+                        # Reverse search - Apply the store filter tag positionally
                         item_query_response = await workflow.execute_activity(
                             DealFinderActivities.pinecone_query,
-                            args=[data['index'], item_embedding, 1], # n_results=1
+                            # Pass arguments positionally: item_embedding, n_results=1, store_tag
+                            args=[item_embedding, 1, store_tag],
                             **activity_options
                         )
 
-                        # Assuming metadata is nested [[item]]
-                        reverse_found_meta = item_query_response.get('metadatas', [[[]]])[0]
-                        if reverse_found_meta and isinstance(reverse_found_meta[0], dict):
-                             workflow.logger.info(f"Reverse search found item for '{item_str}' in {index_name}")
-                             refined_items.append(reverse_found_meta[0])
+                        # Process reverse search results
+                        reverse_found_meta_list = item_query_response.get('metadatas', [[[]]])[0]
+                        if reverse_found_meta_list and isinstance(reverse_found_meta_list[0], dict):
+                             reverse_found_item = reverse_found_meta_list[0]
+                             if reverse_found_item.get('store') == store_tag:
+                                 workflow.logger.info(f"Reverse search found item for '{item_str}' in {store_tag}")
+                                 # Ensure price exists in found metadata, parsing from item_str if necessary
+                                 if 'price' not in reverse_found_item or not reverse_found_item.get('price'):
+                                      try:
+                                          price_part = item_str.split('(')[-1].split(')')[0]
+                                          reverse_found_item['price'] = str(parse_price(price_part))
+                                          workflow.logger.info(f"Parsed price '{reverse_found_item['price']}' from item_str '{item_str}' for reverse match.")
+                                      except (IndexError, ValueError):
+                                          workflow.logger.warning(f"Could not parse price from item_str '{item_str}' for reverse match.")
+
+                                 refined_items.append(reverse_found_item) # Append the found item
+                             else:
+                                 workflow.logger.warning(f"Reverse search for '{item_str}' found item, but store tag mismatch (expected {store_tag}, got {reverse_found_item.get('store')}). Skipping.")
                         else:
-                            workflow.logger.warn(f"Reverse search failed for item '{item_str}' in {index_name}")
-                            # Optionally add a placeholder or skip
+                            workflow.logger.warning(f"Reverse search failed for item '{item_str}' in {store_tag}")
 
                 # Sort final items by price
                 sorted_results = sort_items_by_price(refined_items)
-                workflow.logger.info(f"Processed {len(sorted_results)} items for index {index_name}")
+                workflow.logger.info(f"Processed {len(sorted_results)} items for store filter {store_tag}")
                 final_results_per_index.append({
                     "results": sorted_results,
-                    "collection": index_name # Keep 'collection' key for StoreResult compatibility
+                    "collection": store_tag # Use store_tag as collection identifier
                 })
 
             except Exception as e:
-                workflow.logger.error(f"Error processing LLM results for index {index_name}: {e}")
-                # Append empty results for this index on error
+                workflow.logger.error(f"Error processing LLM results for store filter {store_tag}: {e}")
                 final_results_per_index.append({
                     "results": [],
-                    "collection": index_name # Keep 'collection' key for StoreResult compatibility
+                    "collection": store_tag # Use store_tag as collection identifier
                 })
 
         workflow.logger.info("DealFinderWorkflow finished.")

@@ -16,11 +16,11 @@ async def main():
     # Since activities are stubbed, specific model names may not matter yet.
     # Replace with actual desired values when integrating real services.
     workflow_input = RetrieveItemWorkflowRequest(
-        llmEmbeddingModel="nomic-embed-text", # Example embedding model
-        llmModel="llama3",                # Example LLM
-        query="organic avocados",           # Example search query
-        # Example PineconeDB index names (e.g., store names)
-        pineconeDBIndexes=["store-safeway", "store-trader-joes", "store-whole-foods"]
+        llmEmbeddingModel="text-embedding-3-small", # OpenAI embedding model
+        llmModel="gpt-4o" , # OpenAI LLM
+        query="penne pasta",           # Example search query
+        # Example PineconeDB index names (e.g., store names) - Use exact names from data
+        pineconeDBIndexes=["Safeway", "Trader Joe's", "Whole Foods"] # Changed store names
     )
 
     # Generate a unique ID for this workflow execution
@@ -28,7 +28,7 @@ async def main():
 
     print(f"Starting DealFinderWorkflow with ID: {workflow_id}")
     print(f"Input Query: {workflow_input['query']}")
-    print(f"Indexes: {workflow_input['pineconeDBIndexes']}")
+    print(f"Indexes (Store Tags): {workflow_input['pineconeDBIndexes']}") # Updated print label
 
     try:
         # Start the workflow execution
