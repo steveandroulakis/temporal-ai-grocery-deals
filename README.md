@@ -69,7 +69,6 @@ Requires [uv](https://github.com/astral-sh/uv) to manage dependencies and run co
 This application uses Pinecone for vector storage and retrieval (RAG). You need to run a local instance using Docker:
 
 ```bash
-cd pinecone
 docker compose -f pinecone/docker-compose.yaml up -d
 ```
 
