@@ -1,0 +1,50 @@
+Installation
+Install uv with our standalone installers:
+
+# On macOS and Linux.
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# On Windows.
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+Or, from PyPI:
+
+# With pip.
+pip install uv
+# Or pipx.
+pipx install uv
+If installed via the standalone installer, uv can update itself to the latest version:
+
+uv self update
+See the installation documentation for details and alternative installation methods.
+
+Documentation
+uv's documentation is available at docs.astral.sh/uv.
+
+Additionally, the command line reference documentation can be viewed with uv help.
+
+Features
+Projects
+uv manages project dependencies and environments, with support for lockfiles, workspaces, and more, similar to rye or poetry:
+
+$ uv init example
+Initialized project `example` at `/home/user/example`
+
+$ cd example
+
+$ uv add ruff
+Creating virtual environment at: .venv
+Resolved 2 packages in 170ms
+   Built example @ file:///home/user/example
+Prepared 2 packages in 627ms
+Installed 2 packages in 1ms
+ + example==0.1.0 (from file:///home/user/example)
+ + ruff==0.5.0
+
+$ uv run ruff check
+All checks passed!
+
+$ uv lock
+Resolved 2 packages in 0.33ms
+
+$ uv sync
+Resolved 2 packages in 0.70ms
+Audited 1 package in 0.02ms

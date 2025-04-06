@@ -1,0 +1,13 @@
+services:
+  store-items:
+    image: ghcr.io/pinecone-io/pinecone-index:latest
+    container_name: store-items
+    environment:
+      PORT: 5080
+      INDEX_TYPE: serverless
+      VECTOR_TYPE: dense
+      DIMENSION: 768
+      METRIC: cosine
+    ports:
+      - "5080:5080"
+    platform: linux/amd64

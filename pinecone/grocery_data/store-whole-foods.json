@@ -1,0 +1,72 @@
+[
+  {
+    "store": "Whole Foods",
+    "category": "Fruits",
+    "chunk_text": "Fruits at Whole Foods: Organic Fuji Apples (2.99/lb), Organic Gala Apples (2.79/lb), Organic Honeycrisp Apples (4.49/lb), Organic Bananas (0.79/lb), Organic Lemons, Each (0.99), Organic Limes, Each (0.79), Organic Hass Avocados, Each (2.49), Organic Mangoes, Each (2.99), Organic Seedless Grapes, Red (4.99/lb), Organic Seedless Grapes, Green (4.99/lb)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Berries",
+    "chunk_text": "Berries at Whole Foods: Organic Strawberries, 1lb (5.99), Organic Blueberries, Pint (6.49), Organic Raspberries, 6oz (5.99), Organic Blackberries, 6oz (5.99)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Dairy & Alternatives",
+    "chunk_text": "Dairy & Alternatives at Whole Foods: Organic Whole Milk, Half Gallon (4.29), Organic 2% Milk, Half Gallon (4.19), Organic Skim Milk, Half Gallon (4.19), Pasture-Raised Large Eggs, Dozen (5.49), Organic Large Brown Eggs, Dozen (4.99), Organic Unsalted Butter, 1lb (7.49), Organic Salted Butter, 1lb (7.49), Organic Greek Yogurt, Plain, 32oz (6.99), Organic Vanilla Yogurt, 32oz (5.99), Organic Sharp Cheddar Block, 8oz (5.29), Organic Mild Cheddar Shredded, 8oz (5.49), Organic Mozzarella Shredded, 8oz (5.49), Organic Parmesan Cheese, Grated (6.99), Organic Cream Cheese, 8oz (3.99)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Meat & Seafood",
+    "chunk_text": "Meat & Seafood at Whole Foods: Organic Boneless Skinless Chicken Breast (8.99/lb), Organic Boneless Chicken Thighs (6.49/lb), Organic Whole Chicken (4.99/lb), Grass-Fed Ground Beef 90/10, 1lb (7.99), Grass-Fed Ground Beef 85/15, 1lb (7.49), Organic Beef Sirloin Steak (14.99/lb), Organic Pork Chops, Boneless (9.99/lb), Wild-Caught Salmon Fillet (15.99/lb)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Plant-Based Protein",
+    "chunk_text": "Plant-Based Protein at Whole Foods: Organic Tofu, Extra Firm (2.99), Organic Tempeh (3.49), Plant-Based Ground 'Beef' (8.99)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Bakery",
+    "chunk_text": "Bakery at Whole Foods: Artisan Sourdough Loaf (5.99), Organic Whole Wheat Bread (5.49), Organic Multigrain Bread (5.79), Gluten-Free Bread Loaf (6.99), Organic Baguette (3.49), Organic Flour Tortillas (3.99), Organic Corn Tortillas (3.29), Organic Croissants, Pack of 2 (4.99)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Vegetables",
+    "chunk_text": "Vegetables at Whole Foods: Organic Russet Potatoes, 3lb Bag (4.99), Organic Sweet Potatoes (1.99/lb), Organic Yellow Onions (1.49/lb), Organic Red Onions (1.69/lb), Organic Garlic Bulb (0.99), Organic Carrots, 2lb Bag (3.49), Organic Celery Hearts (3.99), Organic Broccoli Crowns (2.99/lb), Organic Cauliflower Head (4.99), Organic Baby Spinach, 5oz (3.49), Organic Kale Bunch (2.99), Organic Arugula, 5oz (3.99), Organic Romaine Hearts, Pack of 3 (4.49), Organic Iceberg Lettuce (2.99), Organic Bell Peppers, Red (3.99/lb), Organic Bell Peppers, Green (3.49/lb), Organic Cucumbers (1.49 each), Organic Zucchini (2.49/lb), Organic Heirloom Tomatoes (4.99/lb), Organic Cherry Tomatoes, Pint (4.49)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Pantry Staples",
+    "chunk_text": "Pantry Staples at Whole Foods: Organic Whole Wheat Pasta, Spaghetti (2.49), Organic Gluten-Free Pasta, Penne (3.99), Organic Marinara Sauce, 24oz (3.79), Organic Tomato Basil Sauce, 24oz (3.99), Organic Pesto Sauce, 6oz (5.49), Organic Brown Rice, 2lb (4.19), Organic White Jasmine Rice, 2lb (4.49), Organic Quinoa, 1lb (5.99), Organic Rolled Oats, 18oz (4.29), Organic Steel Cut Oats, 24oz (4.79), Organic Canned Black Beans (1.79), Organic Canned Kidney Beans (1.59), Organic Canned Garbanzo Beans (Chickpeas) (1.69), Organic Canned Diced Tomatoes (2.19), Organic Canned Coconut Milk, Full Fat (3.49), Organic Olive Oil, Extra Virgin, 500ml (9.99), Organic Coconut Oil, Virgin, 14oz (7.99), Organic Balsamic Vinegar (6.49), Organic Apple Cider Vinegar (4.99), Organic Maple Syrup, Grade A (9.99), Organic Honey, Raw (8.49), Organic Peanut Butter, Creamy (5.99), Organic Almond Butter, Creamy (10.99), Organic Strawberry Preserves (4.99), Organic All-Purpose Flour, 5lb (6.99), Organic Cane Sugar, 2lb (4.49), Himalayan Pink Salt (3.99), Organic Black Peppercorns Grinder (4.99)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Beverages",
+    "chunk_text": "Beverages at Whole Foods: Organic Oat Milk, Unsweetened (5.49), Organic Almond Milk, Unsweetened (4.99), Organic Soy Milk, Unsweetened (4.49), Organic Coffee Beans, Medium Roast (13.99/lb), Organic Green Tea Bags, 20ct (4.49), Organic Orange Juice, Not from Concentrate (5.99), Kombucha, Ginger Flavor (3.99), Sparkling Water, Lime, 12 pack (5.99), Organic Whole Bean Coffee, Dark Roast (14.99/lb)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Snacks",
+    "chunk_text": "Snacks at Whole Foods: Organic Granola Cereal (5.69), Organic Corn Flakes Cereal (4.99), Organic Tortilla Chips, Salted (3.99), Organic Salsa, Medium (4.29), Organic Guacamole Kit (Avocados, Lime, Seasoning) (6.99), Organic Dark Chocolate Bar, 70% Cacao (3.49), Organic Trail Mix (7.99), Organic Raw Almonds, 1lb (11.99), Organic Walnuts, 1lb (10.99), Organic Popcorn Kernels (3.49)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Frozen Foods",
+    "chunk_text": "Frozen Foods at Whole Foods: Organic Frozen Berries Mix, 3lb (12.99), Organic Frozen Spinach, 10oz (2.99), Organic Frozen Peas, 10oz (2.79), Organic Frozen Broccoli Florets, 1lb (3.99), Organic Veggie Burgers, 4 pack (5.99), Plant-Based Ice Cream, Vanilla Bean (6.49)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Condiments",
+    "chunk_text": "Condiments at Whole Foods: 365 Whole Foods Market Organic Ketchup (3.29), 365 Whole Foods Market Organic Yellow Mustard (2.99), 365 Whole Foods Market Organic Mayonnaise (4.99)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Prepared Foods",
+    "chunk_text": "Prepared Foods at Whole Foods: Prepared Sushi Roll (California) (9.99), Whole Rotisserie Chicken (Organic) (14.99)"
+  },
+  {
+    "store": "Whole Foods",
+    "category": "Household",
+    "chunk_text": "Household at Whole Foods: Natural Dish Soap (4.49), Recycled Paper Towels, 6 rolls (9.99)"
+  }
+] 

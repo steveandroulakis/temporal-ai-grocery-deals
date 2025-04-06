@@ -1,0 +1,67 @@
+[
+  {
+    "store": "Trader Joe's",
+    "category": "Fruits",
+    "chunk_text": "Fruits at Trader Joe's: Bananas, Conventional (0.19 each), Organic Bananas (0.25 each), Honeycrisp Apples (1.29 each), Organic Fuji Apples (0.99 each), Organic Gala Apples (0.89 each), Mandarin Oranges, 2lb Bag (3.49), Lemons, Bag (1.99), Limes, Bag (1.79), Organic Avocados, Bag of 4 (4.49), Teeny Tiny Avocados, Bag (3.99), Mangoes, Each (1.49), Red Seedless Grapes (3.49/lb), Green Seedless Grapes (3.49/lb)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Berries",
+    "chunk_text": "Berries at Trader Joe's: Organic Strawberries, 1lb (4.99), Organic Blueberries, 6oz (3.99), Raspberries, 6oz (3.99), Blackberries, 6oz (3.99)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Dairy & Alternatives",
+    "chunk_text": "Dairy & Alternatives at Trader Joe's: Organic Whole Milk, Half Gallon (3.99), Organic 2% Milk, Half Gallon (3.89), Organic Fat Free Milk, Half Gallon (3.89), Cage Free Large Brown Eggs, Dozen (3.49), Organic Pasture Raised Large Brown Eggs (4.99), Cultured Salted Butter, 8oz (3.29), Organic Unsalted Butter, 8oz (3.99), Greek Yogurt, Plain Whole Milk, 32oz (4.99), Greek Yogurt, Nonfat Plain, 32oz (4.99), Vanilla Cultured Coconut Milk Yogurt Alt (1.49), Unexpected Cheddar Cheese (3.99), Shredded Mozzarella Cheese (3.49), Shredded Mexican Blend Cheese (3.79), Fresh Mozzarella Log (3.99), Goat Cheese Log, Plain (2.99), Cream Cheese Bar (1.99)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Meat",
+    "chunk_text": "Meat at Trader Joe's: Organic Boneless Skinless Chicken Breast (6.99/lb), Organic Chicken Thighs, Boneless Skinless (5.99/lb), All Natural Ground Turkey 85/15 (4.49/lb), Ground Beef 80/20 (4.99/lb), Grass Fed Angus Beef Patties (6.99), Uncured Applewood Smoked Bacon (5.49)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Plant-Based Protein",
+    "chunk_text": "Plant-Based Protein at Trader Joe's: Organic Tofu, Extra Firm (1.99), Sriracha Flavored Baked Tofu (3.69), Meatless Ground (4.49)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Bakery",
+    "chunk_text": "Bakery at Trader Joe's: Sourdough Bread Loaf, Sliced (3.49), Whole Wheat Bread (2.99), Multigrain Bread (3.29), Gluten Free White Sandwich Bread (4.99), Ciabatta Rolls, 4 pack (2.49), Corn & Wheat Tortillas (1.99), Organic Flour Tortillas (2.99), Everything Bagels (2.49)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Vegetables",
+    "chunk_text": "Vegetables at Trader Joe's: Sweet Potatoes (1.29/lb), Russet Potatoes, 5lb bag (3.99), Yellow Onions, 3lb bag (2.49), Red Onions (0.99/lb), Garlic, 3 pack (1.49), Organic Carrots, 1lb bag (1.29), Celery Hearts (2.29), Broccoli Florets (2.79), Cauliflower Head (3.49), Organic Baby Spinach (2.29), Organic Baby Kale (2.49), Organic Arugula (2.49), Romaine Hearts, 3 pack (2.99), Iceberg Lettuce (1.99), Bell Peppers, Mixed Trio (3.99), Persian Cucumbers (2.49), Organic Zucchini (2.99/lb), Tomatoes on the Vine (2.99/lb), Cherry Tomatoes, Pint (2.99)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Pantry Staples",
+    "chunk_text": "Pantry Staples at Trader Joe's: Pasta, Spaghetti (0.99), Pasta, Penne Rigate (0.99), Organic Brown Rice Pasta, Fusilli (2.99), Organic Tomato Basil Marinara Sauce (2.99), Arrabiata Sauce (2.79), Vegan Kale, Cashew & Basil Pesto (3.79), Organic Brown Rice, 1lb (2.99), Organic White Quinoa, 1lb (3.99), Rolled Oats (2.99), Organic Steel Cut Oats (2.49), Canned Black Beans (0.99), Canned Kidney Beans (0.99), Canned Garbanzo Beans (0.99), Organic Diced Tomatoes (1.49), Coconut Milk, Full Fat (1.69), Organic Extra Virgin Olive Oil, 500ml (6.99), Organic Coconut Oil, 16oz (4.99), Balsamic Vinegar of Modena (2.29), Organic Apple Cider Vinegar (3.49), Organic Maple Syrup, Grade A Dark Robust (7.99), Multi-Floral & Clover Honey (3.99), Creamy Salted Peanut Butter (2.29), Creamy Almond Butter, Salted (5.99), Organic Strawberry Fruit Spread (3.49), All Purpose Flour (2.99), Organic Sugar (3.49), Sea Salt Grinder (2.29), Black Peppercorn Grinder (2.29), Everything But The Bagel Seasoning Blend (1.99)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Beverages",
+    "chunk_text": "Beverages at Trader Joe's: Unsweetened Almond Beverage (2.99), Unsweetened Organic Soy Beverage (2.79), Shelf Stable Oat Beverage (2.49), Medium Roast Coffee Cups, 12 ct (4.99), Organic Green Tea Bags (2.49), Orange Juice, Pulp Free (3.49), Sparkling Water, Lemon Raspberry (0.99), French Roast Coffee, Whole Bean (7.99)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Snacks",
+    "chunk_text": "Snacks at Trader Joe's: Organic Corn Flakes Cereal (2.99), Peanut Butter Filled Pretzels (2.49), Organic Tortilla Chips, White Corn (2.99), Salsa Autentica (1.99), Organic Chunky Guacamole (3.99), Dark Chocolate Peanut Butter Cups (4.29), Joe-Joe's Cookies, Vanilla Bean Cream (2.99), Chocolate Chip Cookies, Crispy Crunchy (3.99), Trail Mix, Happy Trekking (4.99), Raw Almonds (4.99), Dry Roasted & Salted Pistachios (7.49), Organic Popcorn with Olive Oil (2.29)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Frozen Foods",
+    "chunk_text": "Frozen Foods at Trader Joe's: Frozen Mandarin Orange Chicken (4.99), Frozen Organic Mixed Berries (3.49), Frozen Organic Peas (1.69), Frozen Organic Broccoli Florets (1.99), Vegan Tikka Masala (3.99), Soy Creamy Cherry Chocolate Chip Ice Cream (4.49), Hold the Cone! Mini Ice Cream Cones (Chocolate) (3.79)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Condiments",
+    "chunk_text": "Condiments at Trader Joe's: Organic Ketchup (1.99), Organic Yellow Mustard (1.79), Mayonnaise (2.99)"
+  },
+  {
+    "store": "Trader Joe's",
+    "category": "Household",
+    "chunk_text": "Household at Trader Joe's: Paper Towels, 2 rolls (3.99), Dish Soap, Citrus (2.99)"
+  }
+] 
