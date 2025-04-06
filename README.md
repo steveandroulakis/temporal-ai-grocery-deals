@@ -103,9 +103,59 @@ uv run python -m scripts.run_worker
 ```bash
 # Example query
 uv run python -m scripts.run_workflow --query "pasta"
+```
 
+Example response:
+```
+Starting DealFinderWorkflow with ID: deal-finder-606afe74-c7e8-45c3-9675-8e584d898f80
+Input Query: pasta
+Indexes (Store Tags): ['Safeway', "Trader Joe's", 'Whole Foods']
+Workflow started. Waiting for result...
+
+--- Workflow Result ---
+[
+  {
+    "collection": "Safeway",
+    "results": [
+      {
+        "name": "Pasta, Spaghetti",
+        "price": "1.29"
+      }
+    ]
+  },
+  {
+    "collection": "Trader Joe's",
+    "results": [
+      {
+        "name": "Pasta, Spaghetti",
+        "price": "0.99"
+      },
+      {
+        "name": "Pasta, Penne Rigate",
+        "price": "0.99"
+      },
+      {
+        "name": "Organic Brown Rice Pasta, Fusilli",
+        "price": "2.99"
+      }
+    ]
+  },
+  {
+    "collection": "Whole Foods",
+    "results": [
+      {
+        "name": "Organic Whole Wheat Pasta",
+        "price": "2.49"
+      }
+    ]
+  }
+]
+```
+
+You can also be fuzzy with your query:
+```
 # A more interesting query
-uv run python -m scripts.run_workflow --query "crackers and other things that go great with hummus"
+uv run python -m scripts.run_workflow --query "to eat hummus with"
 ```
 
 * Workflow runs with stubbed (no nothing) activities for now.
@@ -114,12 +164,13 @@ uv run python -m scripts.run_workflow --query "crackers and other things that go
 Things I'm doing next
 - [x] Combine grocery store vector data into a single vector index
 - [x] Reduce cardinality of vector data
-- [ ] Replace Ollama calls with OpenAI calls in workflow
-- [ ] Ensure old Chroma DB activities are now working Pinecone ones
+- [x] Replace Ollama calls with OpenAI calls in workflow
+- [x] Ensure old Chroma DB activities are now working Pinecone ones
 These will enable the Python port of the workflow to run.
 
 Then I'll add the following:
 - [ ] Schedule for updating vector data
 - [ ] Notification workflow when a deal is found
+- [ ] Figure out what logic determines the best deal
 - [ ] Web UI (port of Anthony's existing one + chat functionality?)
 - [ ] Other (currently under discussion!)

@@ -1,3 +1,4 @@
+import asyncio
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from datetime import timedelta
@@ -28,8 +29,8 @@ AllStoreResultsWorkflowResponse = List[StoreResult]
 # --- Temporal Activity Configuration ---
 
 # Use timeouts similar to agent_goal_workflow or adjust as needed
-ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(minutes=5)
-ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT = timedelta(minutes=6)
+ACTIVITY_START_TO_CLOSE_TIMEOUT = timedelta(seconds=12)
+ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT = timedelta(minutes=1)
 RETRY_POLICY = RetryPolicy(
     initial_interval=timedelta(seconds=5),
     backoff_coefficient=1.5, # Slightly more aggressive backoff than agent_goal
@@ -85,49 +86,52 @@ class DealFinderWorkflow:
         )
         query_embedding = embedding_result['embeddings']
 
-        # 2. Query the single index for each store filter
-        workflow.logger.info(f"Querying single index with store filters: {store_filter_tags}")
-        query_results_by_store = {}
+        # 2. Query the single index for each store filter in parallel
+        workflow.logger.info(f"Querying single index in parallel with store filters: {store_filter_tags}")
+        pinecone_query_tasks = []
         for store_tag in store_filter_tags:
-            try:
-                query_response = await workflow.execute_activity(
-                    DealFinderActivities.pinecone_query,
-                    # Pass arguments positionally: embeddings, n_results (using default 10), store_tag
-                    args=[query_embedding, 10, store_tag],
-                    **activity_options
-                )
+            task = workflow.execute_activity(
+                DealFinderActivities.pinecone_query,
+                # Pass arguments positionally: embeddings, n_results (using default 10), store_tag
+                args=[query_embedding, 10, store_tag],
+                **activity_options
+            )
+            pinecone_query_tasks.append(task)
+
+        # Gather results, handling potential errors for individual activities
+        pinecone_results = await asyncio.gather(*pinecone_query_tasks, return_exceptions=True)
+
+        query_results_by_store = {}
+        for i, store_tag in enumerate(store_filter_tags):
+            result = pinecone_results[i]
+            if isinstance(result, Exception):
+                workflow.logger.error(f"Failed to query with store filter {store_tag}: {result}")
+                query_results_by_store[store_tag] = {"metadata": [], "possibleItems": []}
+            else:
                 # Store results keyed by the store tag
-                possible_items = query_response.get('documents', [[]])[0]
-                metadata = query_response.get('metadatas', [[]])[0]
+                possible_items = result.get('documents', [[]])[0]
+                metadata = result.get('metadatas', [[]])[0]
                 query_results_by_store[store_tag] = {
                     "metadata": metadata,
                     "possibleItems": possible_items
                 }
                 workflow.logger.info(f"Query successful for store filter: {store_tag}")
-            except Exception as e:
-                workflow.logger.error(f"Failed to query with store filter {store_tag}: {e}")
-                # Store empty results for this tag on failure
-                query_results_by_store[store_tag] = {"metadata": [], "possibleItems": []}
-                continue
 
-        # 3. Process results with LLM and refine
-        workflow.logger.info("Processing filtered results with LLM...")
-        final_results_per_index: AllStoreResultsWorkflowResponse = []
 
-        # Iterate through the results we stored, keyed by store_tag
+        # 3. Augment results and generate final output using LLM in parallel
+        workflow.logger.info("Processing filtered results with LLM in parallel...")
+        llm_tasks = []
+        store_tags_for_llm = [] # Keep track of which tag corresponds to which task
+
+        # Prepare LLM tasks for stores with results
         for store_tag, query_data in query_results_by_store.items():
             possible_items = query_data.get('possibleItems', [])
-            metadata_list = query_data.get('metadata', [])
+            metadata_list = query_data.get('metadata', []) # Keep metadata in case needed later, though not used in prompt
 
             if not possible_items:
                 workflow.logger.warning(f"No possible items found from PineconeDB query for store filter {store_tag}. Skipping LLM step.")
-                final_results_per_index.append({
-                    "results": [],
-                    "collection": store_tag # Use store_tag as collection identifier
-                })
-                continue
+                continue # Skip LLM if no items
 
-            # Construct LLM prompt for structured JSON output
             # Format the items clearly for the LLM
             formatted_items_list = "\n".join([f"- {item}" for item in possible_items])
             llm_prompt = (
@@ -145,7 +149,7 @@ class DealFinderWorkflow:
                 f"5. If NONE of the items in the list are relevant to the query, return an empty JSON array ([])."
             )
 
-            # Define the expected JSON schema for the LLM output
+            # Define the expected JSON schema (same as before)
             llm_output_schema = {
                 "type": "array",
                 "items": {
@@ -158,30 +162,55 @@ class DealFinderWorkflow:
                 }
             }
 
-            try:
-                workflow.logger.info(f"Calling LLM for store filter: {store_tag}")
-                llm_response = await workflow.execute_activity(
-                    DealFinderActivities.llm_generate,
-                    # Pass system prompt and the structured format hint positionally
-                    args=[llm_model, llm_prompt, "You are a helpful AI assistant. Respond ONLY with the requested JSON.", llm_output_schema],
-                    **activity_options
-                )
-                # The activity now returns the parsed list directly
-                llm_extracted_items = llm_response['response'] 
+            workflow.logger.info(f"Preparing LLM task for store filter: {store_tag}")
+            task = workflow.execute_activity(
+                DealFinderActivities.llm_generate,
+                args=[llm_model, llm_prompt, "You are a helpful AI assistant. Respond ONLY with the requested JSON.", llm_output_schema],
+                **activity_options
+            )
+            llm_tasks.append(task)
+            store_tags_for_llm.append(store_tag) # Associate task with its store tag
 
-                # Append the results for this store tag
-                final_results_per_index.append({
-                    "results": llm_extracted_items,
-                    "collection": store_tag
-                })
-                workflow.logger.info(f"Successfully processed LLM results for store filter: {store_tag}")
+        # Gather LLM results, handling potential errors
+        final_results_per_index: AllStoreResultsWorkflowResponse = []
+        if llm_tasks:
+             llm_results = await asyncio.gather(*llm_tasks, return_exceptions=True)
 
-            except Exception as e:
-                workflow.logger.error(f"Error processing LLM results for store filter {store_tag}: {e}")
-                final_results_per_index.append({
-                    "results": [],
-                    "collection": store_tag # Use store_tag as collection identifier
-                })
+             # Process LLM results
+             for i, store_tag in enumerate(store_tags_for_llm):
+                 result = llm_results[i]
+                 if isinstance(result, Exception):
+                     workflow.logger.error(f"Error processing LLM results for store filter {store_tag}: {result}")
+                     final_results_per_index.append({
+                         "results": [],
+                         "collection": store_tag
+                     })
+                 else:
+                     llm_extracted_items = result['response']
+                     final_results_per_index.append({
+                         "results": llm_extracted_items,
+                         "collection": store_tag
+                     })
+                     workflow.logger.info(f"Successfully processed LLM results for store filter: {store_tag}")
+        else:
+            workflow.logger.info("No LLM tasks to execute.")
+
+        # Add results for stores that were skipped in LLM step
+        processed_store_tags = {res['collection'] for res in final_results_per_index}
+        for store_tag in store_filter_tags:
+            if store_tag not in processed_store_tags:
+                # Check if it had items but failed pinecone, or had no items
+                if not query_results_by_store[store_tag].get('possibleItems'):
+                     workflow.logger.info(f"Adding empty result for store filter {store_tag} (skipped LLM due to no pinecone results).")
+                     final_results_per_index.append({
+                        "results": [],
+                        "collection": store_tag
+                    })
+                # Note: Cases where pinecone failed are already handled by the initial check
 
         workflow.logger.info("DealFinderWorkflow finished.")
-        return final_results_per_index 
+        # Ensure the order matches the input `store_filter_tags` if necessary, or return as is.
+        # Current implementation returns results in the order LLM tasks finished/failed.
+        # If specific order is needed, sort `final_results_per_index` based on `store_filter_tags`.
+        # For now, returning as is.
+        return final_results_per_index

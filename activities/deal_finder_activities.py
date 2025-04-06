@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from pinecone.grpc import PineconeGRPC as Pinecone, GRPCClientConfig
 from pinecone import Index, QueryResponse
 # Import OpenAI client
-from openai import OpenAI, OpenAIError # Added OpenAIError
+from openai import OpenAI, OpenAIError
 
 # Define placeholder types based on TypeScript usage
 # Refined PineconeIndex type
@@ -24,6 +24,102 @@ DEFAULT_OPENAI_EMBEDDING_DIMENSION = 768
 
 class DealFinderActivities:
 
+    def __init__(self):
+        """Initialize OpenAI and Pinecone clients once."""
+        activity.logger.info("Initializing DealFinderActivities...")
+
+        # --- Initialize OpenAI Client --- START
+        openai_api_key = os.environ.get("OPENAI_API_KEY")
+        if not openai_api_key:
+            activity.logger.error("OPENAI_API_KEY environment variable not set.")
+            raise ValueError("OPENAI_API_KEY environment variable not set.")
+        self.openai_client = OpenAI(api_key=openai_api_key)
+        activity.logger.info("OpenAI client initialized.")
+
+        # Determine embedding dimension
+        try:
+            dimension_str = os.environ.get("OPENAI_EMBEDDING_DIMENSION")
+            self.embedding_dimension = int(dimension_str) if dimension_str else DEFAULT_OPENAI_EMBEDDING_DIMENSION
+            activity.logger.info(f"Using embedding dimension: {self.embedding_dimension}")
+        except ValueError:
+            activity.logger.warning(f"Invalid OPENAI_EMBEDDING_DIMENSION value: {dimension_str}. Using default: {DEFAULT_OPENAI_EMBEDDING_DIMENSION}")
+            self.embedding_dimension = DEFAULT_OPENAI_EMBEDDING_DIMENSION
+        # --- Initialize OpenAI Client --- END
+
+
+        # --- Initialize Pinecone Client --- START
+        self.pinecone_index_name = os.environ.get("PINECONE_INDEX_NAME")
+        if not self.pinecone_index_name:
+            activity.logger.error("PINECONE_INDEX_NAME environment variable not set.")
+            raise ValueError("PINECONE_INDEX_NAME environment variable not set.")
+
+        pinecone_grpc_host = self._determine_pinecone_host(self.pinecone_index_name)
+
+        activity.logger.info(f"Connecting to Pinecone index '{self.pinecone_index_name}' via gRPC at {pinecone_grpc_host}...")
+        self.pinecone_index: Optional[PineconeIndex] = None
+        try:
+            pc = Pinecone(api_key="dummy-key", host=pinecone_grpc_host, plaintext=True)
+            self.pinecone_index = pc.Index(
+                name=self.pinecone_index_name,
+                host=pinecone_grpc_host,
+                grpc_config=GRPCClientConfig(secure=False)
+            )
+            # Perform a dummy operation like describe_index_stats to check connection
+            # index_stats = self.pinecone_index.describe_index_stats() # Optional check
+            # activity.logger.info(f"Index Stats: {index_stats}")
+            activity.logger.info(f"Successfully obtained gRPC index handle for '{self.pinecone_index_name}'.")
+
+        except Exception as e:
+            activity.logger.error(f"Error connecting to or getting index '{self.pinecone_index_name}' at {pinecone_grpc_host}: {e}")
+            raise # Re-raise the exception
+
+        if not self.pinecone_index or not hasattr(self.pinecone_index, 'query'):
+             activity.logger.error("Failed to obtain a valid Pinecone index object.")
+             raise TypeError("Failed to obtain a valid Pinecone index object for querying.")
+        activity.logger.info("Pinecone client and index handle initialized.")
+        # --- Initialize Pinecone Client --- END
+
+        activity.logger.info("DealFinderActivities initialization complete.")
+
+
+    def _determine_pinecone_host(self, index_name: str) -> str:
+        """Helper method to determine Pinecone host from docker-compose."""
+        # Find docker-compose path relative to likely workspace root
+        docker_compose_abs_path = os.path.abspath(DOCKER_COMPOSE_PATH)
+        if not os.path.exists(docker_compose_abs_path):
+            script_dir = os.path.dirname(__file__)
+            rel_path = os.path.join(script_dir, '..', DOCKER_COMPOSE_PATH)
+            docker_compose_abs_path = os.path.abspath(rel_path)
+            if not os.path.exists(docker_compose_abs_path):
+                activity.logger.error(f"docker-compose.yaml not found at {DOCKER_COMPOSE_PATH} or relative path. Cannot determine port.")
+                raise FileNotFoundError("docker-compose.yaml not found, cannot determine Pinecone port.")
+
+        # Load docker-compose and extract port
+        pinecone_grpc_host = None
+        try:
+            with open(docker_compose_abs_path, 'r') as f:
+                config = yaml.safe_load(f)
+            if not config or 'services' not in config or index_name not in config['services']:
+                raise ValueError(f"Invalid docker-compose file or service '{index_name}' not found.")
+            service_config = config['services'][index_name]
+            if 'ports' in service_config and service_config['ports']:
+                port_mapping = service_config['ports'][0]
+                port = int(port_mapping.split(':')[0]) # Get the host port
+                pinecone_grpc_host = f"localhost:{port}"
+                activity.logger.info(f"Determined Pinecone gRPC host from docker-compose: {pinecone_grpc_host}")
+            else:
+                raise ValueError(f"No port mapping found for service '{index_name}'.")
+        except (yaml.YAMLError, ValueError, IndexError, TypeError, FileNotFoundError) as e:
+            activity.logger.error(f"Error reading docker-compose or extracting port: {e}")
+            raise
+
+        if not pinecone_grpc_host:
+             activity.logger.error("Failed to determine pinecone_grpc_host.")
+             raise ValueError("Failed to determine pinecone_grpc_host.")
+
+        return pinecone_grpc_host
+
+
     @activity.defn
     async def json_repair(self, json_str: str) -> str:
         """
@@ -39,31 +135,20 @@ class DealFinderActivities:
     @activity.defn
     async def llm_embed(self, model: str, input_text: str) -> Dict[str, List[float]]:
         """
-        Activity using OpenAI to generate embeddings for the input text.
-        Reads OPENAI_API_KEY and OPENAI_EMBEDDING_DIMENSION from environment.
+        Activity using the pre-initialized OpenAI client to generate embeddings.
         Uses the 'model' parameter to specify the OpenAI embedding model.
         Returns the embedding vector itself under the 'embeddings' key.
         """
         activity.logger.info(f"llm_embed called for model '{model}' with input length: {len(input_text)}")
-        openai_api_key = os.environ.get("OPENAI_API_KEY")
-        if not openai_api_key:
-            activity.logger.error("OPENAI_API_KEY environment variable not set.")
-            raise ValueError("OPENAI_API_KEY environment variable not set.")
+        # API Key check removed, client initialized in __init__
+        # Dimension calculation removed, stored in self.embedding_dimension
 
         try:
-            dimension_str = os.environ.get("OPENAI_EMBEDDING_DIMENSION")
-            embedding_dimension = int(dimension_str) if dimension_str else DEFAULT_OPENAI_EMBEDDING_DIMENSION
-            activity.logger.info(f"Using embedding dimension: {embedding_dimension}")
-        except ValueError:
-            activity.logger.warning(f"Invalid OPENAI_EMBEDDING_DIMENSION value: {dimension_str}. Using default: {DEFAULT_OPENAI_EMBEDDING_DIMENSION}")
-            embedding_dimension = DEFAULT_OPENAI_EMBEDDING_DIMENSION
-
-        try:
-            client = OpenAI(api_key=openai_api_key)
-            res = client.embeddings.create(
+            # Use the initialized client and dimension
+            res = self.openai_client.embeddings.create(
                 input=[input_text],
                 model=model,
-                dimensions=embedding_dimension
+                dimensions=self.embedding_dimension # Use instance variable
             )
             embedding = res.data[0].embedding
             activity.logger.info(f"Successfully generated embedding with dimension {len(embedding)}")
@@ -80,17 +165,13 @@ class DealFinderActivities:
     @activity.defn
     async def llm_generate(self, model: str, prompt: str, system: Optional[str] = None, format_hint: Optional[Dict[str, Any]] = None) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Activity using OpenAI to generate text based on the prompt.
+        Activity using the pre-initialized OpenAI client to generate text.
         Supports system messages and JSON mode if format_hint={'type': 'json_object'} is provided.
-        Reads OPENAI_API_KEY from environment.
         Uses the 'model' parameter to specify the OpenAI chat model.
         Returns the generated content under the 'response' key.
         """
         activity.logger.info(f"llm_generate called for model '{model}' with prompt length: {len(prompt)}")
-        openai_api_key = os.environ.get("OPENAI_API_KEY")
-        if not openai_api_key:
-            activity.logger.error("OPENAI_API_KEY environment variable not set.")
-            raise ValueError("OPENAI_API_KEY environment variable not set.")
+        # API Key check removed, client initialized in __init__
 
         messages = []
         if system:
@@ -98,8 +179,9 @@ class DealFinderActivities:
         messages.append({"role": "user", "content": prompt})
 
         try:
-            client = OpenAI(api_key=openai_api_key)
-            
+            # Use the initialized client
+            # client = OpenAI(api_key=openai_api_key) # Removed
+
             # --- Determine OpenAI request parameters --- START
             request_params = {
                 "model": model,
@@ -111,7 +193,7 @@ class DealFinderActivities:
                  request_params["response_format"] = {"type": "json_object"}
             # --- Determine OpenAI request parameters --- END
 
-            completion = client.chat.completions.create(**request_params) # Use prepared params
+            completion = self.openai_client.chat.completions.create(**request_params) # Use initialized client
 
             response_content = completion.choices[0].message.content
             
@@ -200,85 +282,25 @@ class DealFinderActivities:
     @activity.defn
     async def pinecone_query(self, query_embedding: List[float], n_results: int = 10, store_filter_tag: Optional[str] = None) -> Dict[str, List[List[Any]]]:
         """
-        Connects to the single Pinecone index (using env PINECONE_INDEX_NAME
-        and deriving port from docker-compose.yaml), then queries it using
-        a single embedding vector via the gRPC client.
+        Queries the pre-initialized Pinecone index using a single embedding vector.
         Optionally filters results based on the 'store' metadata tag.
         Extracts 'original_chunk' for documents and full metadata.
         """
-        # --- Determine Pinecone Host and Index Name --- START
-        env_index_name = os.environ.get("PINECONE_INDEX_NAME")
-        if not env_index_name:
-            activity.logger.error("PINECONE_INDEX_NAME environment variable not set.")
-            raise ValueError("PINECONE_INDEX_NAME environment variable not set.")
+        # --- Determine Pinecone Host and Index Name --- REMOVED (Done in __init__)
+        # --- Connect to Pinecone Index --- REMOVED (Done in __init__)
 
-        # Find docker-compose path relative to likely workspace root
-        # Note: This assumes the worker runs with the workspace root as CWD
-        # or that the relative path from CWD to workspace root is consistent.
-        # A more robust solution might involve setting WORKSPACE_ROOT env var.
-        docker_compose_abs_path = os.path.abspath(DOCKER_COMPOSE_PATH)
-        if not os.path.exists(docker_compose_abs_path):
-             # Try path relative to this script's dir if not found from CWD
-             script_dir = os.path.dirname(__file__)
-             rel_path = os.path.join(script_dir, '..', DOCKER_COMPOSE_PATH)
-             docker_compose_abs_path = os.path.abspath(rel_path)
-             if not os.path.exists(docker_compose_abs_path):
-                  activity.logger.error(f"docker-compose.yaml not found at {DOCKER_COMPOSE_PATH} or relative path. Cannot determine port.")
-                  raise FileNotFoundError("docker-compose.yaml not found, cannot determine Pinecone port.")
+        # Use the pre-initialized index handle and name
+        index = self.pinecone_index
+        index_name = self.pinecone_index_name # Use instance variable
 
-        # Load docker-compose and extract port
-        pinecone_grpc_host = None
-        try:
-            with open(docker_compose_abs_path, 'r') as f:
-                config = yaml.safe_load(f)
-            if not config or 'services' not in config or env_index_name not in config['services']:
-                raise ValueError(f"Invalid docker-compose file or service '{env_index_name}' not found.")
-            service_config = config['services'][env_index_name]
-            if 'ports' in service_config and service_config['ports']:
-                port_mapping = service_config['ports'][0]
-                port = int(port_mapping.split(':')[0]) # Get the host port
-                pinecone_grpc_host = f"localhost:{port}"
-                activity.logger.info(f"Determined Pinecone gRPC host from docker-compose: {pinecone_grpc_host}")
-            else:
-                raise ValueError(f"No port mapping found for service '{env_index_name}'.")
-        except (yaml.YAMLError, ValueError, IndexError, TypeError, FileNotFoundError) as e:
-            activity.logger.error(f"Error reading docker-compose or extracting port: {e}")
-            raise # Re-raise to fail the activity
-
-        if not pinecone_grpc_host:
-             # This case should be caught by exceptions above, but as a safeguard:
-             activity.logger.error("Failed to determine pinecone_grpc_host.")
-             raise ValueError("Failed to determine pinecone_grpc_host.")
-
-        # --- Determine Pinecone Host and Index Name --- END
-
-        # --- Connect to Pinecone Index --- START
-        activity.logger.info(f"Connecting to Pinecone index '{env_index_name}' via gRPC at {pinecone_grpc_host} within pinecone_query activity...")
-        index: Optional[PineconeIndex] = None
-        try:
-            # Use the dynamically determined host
-            pc = Pinecone(api_key="dummy-key", host=pinecone_grpc_host, plaintext=True)
-            index = pc.Index(
-                name=env_index_name,
-                host=pinecone_grpc_host,
-                grpc_config=GRPCClientConfig(secure=False)
-            )
-            activity.logger.info(f"Successfully obtained gRPC index handle for '{env_index_name}'.")
-        except Exception as e:
-            activity.logger.error(f"Error connecting to or getting index '{env_index_name}' at {pinecone_grpc_host}: {e}")
-            raise # Re-raise the exception to fail the activity
-
+        # Check if index was successfully initialized
         if not index or not hasattr(index, 'query'):
-             activity.logger.error("Failed to obtain a valid Pinecone index object.")
-             raise TypeError("Failed to obtain a valid Pinecone index object for querying.")
-        # --- Connect to Pinecone Index --- END
+             activity.logger.error("Pinecone index object is not valid or not initialized.")
+             # Return empty results or raise an error, depending on desired behavior
+             return {"documents": [[]], "metadatas": [[]]} # Example: return empty
 
-        # Use the connected index name for logging
-        index_name = env_index_name # Keep for logging consistency
-        filter_dict = {"store": store_filter_tag} if store_filter_tag else None # Re-enabled filter
-        # filter_dict = None # <--- TEMPORARILY DISABLED FILTER FOR DEBUGGING
-        log_filter_msg = f"with filter: {filter_dict}" if filter_dict else "with no filter" # Adjusted log msg
-        # Updated log message for single embedding
+        filter_dict = {"store": store_filter_tag} if store_filter_tag else None
+        log_filter_msg = f"with filter: {filter_dict}" if filter_dict else "with no filter"
         activity.logger.info(f"Querying index '{index_name}' with 1 embedding, top_k={n_results} {log_filter_msg}")
 
         # Validate the received embedding

@@ -41,7 +41,7 @@ async def main():
 
     # Run the worker
     # Using a ThreadPoolExecutor for activities. Adjust max_workers if needed.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as activity_executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as activity_executor:
         worker = Worker(
             client,
             task_queue=TEMPORAL_TASK_QUEUE,
