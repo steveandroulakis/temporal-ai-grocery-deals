@@ -70,7 +70,7 @@ This application uses Pinecone for vector storage and retrieval (RAG). You need 
 
 ```bash
 cd pinecone
-docker compose up -d
+docker compose -f pinecone/docker-compose.yaml up -d
 ```
 
 Load the sample grocery data (located in `pinecone/grocery_data`):
