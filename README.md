@@ -77,3 +77,17 @@ docker compose -f pinecone/docker-compose.yaml up -d
 Load the sample grocery data (located in `pinecone/grocery_data`):
 
 ```
+
+## TODO
+Things I'm doing next
+- [x] Combine grocery store vector data into a single vector index
+- [x] Reduce cardinality of vector data
+- [ ] Replace Ollama calls with OpenAI calls in workflow
+- [ ] Ensure old Chroma DB activities are now working Pinecone ones
+These will enable the Python port of the workflow to run.
+
+Then I'll add the following:
+- [ ] Schedule for updating vector data
+- [ ] Notification workflow when a deal is found
+- [ ] Web UI (port of Anthony's existing one + chat functionality?)
+- [ ] Other (currently under discussion!)
