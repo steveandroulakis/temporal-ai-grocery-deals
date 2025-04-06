@@ -70,13 +70,41 @@ Requires [uv](https://github.com/astral-sh/uv) to manage dependencies and run co
 This application uses Pinecone for vector storage and retrieval (RAG). You need to run a local instance using Docker:
 
 ```bash
-# Runs docker compose using the file in the pinecone/ directory
-docker compose -f pinecone/docker-compose.yaml up -d
+cd pinecone
+docker compose up -d
 ```
 
 Load the sample grocery data (located in `pinecone/grocery_data`):
 
+```bash
+# Runs the script within the uv-managed environment
+uv run python pinecone/preload_vector_data.py
 ```
+
+You can test the Retrieval-Augmented Generation (RAG) setup by searching for groceries:
+
+```bash
+uv run python pinecone/search_groceries.py "milk"
+uv run python pinecone/search_groceries.py "citrus"
+```
+
+And you should see results!
+
+### Running the Workflow
+
+Run the following commands in separate terminal windows:
+
+1. Start the Temporal worker:
+```bash
+uv run python -m scripts.run_worker
+```
+
+2. Start the Temporal workflow:
+```bash
+uv run python -m scripts.run_workflow
+```
+
+* Workflow runs with stubbed (no nothing) activities for now.
 
 ## TODO
 Things I'm doing next
