@@ -4,7 +4,7 @@ Porting and enhancing Anthony's https://github.com/anthonywong555/temporal-groce
 
 Work in progress.
 
-* Search stores workflow ([`run_workflow.py`](scripts/run_workflow.py)) is stubbed with ([`_activities.py`](activities/_activities.py)) activities for now.
+* Search stores workflow ([`deal_finder_workflow.py`](workflows/deal_finder_workflow.py)) is stubbed with ([`deal_finder_activities.py`](activities/deal_finder_activities.py)) activities for now.
 * Sample grocery data ([`pinecone/grocery_data/`](pinecone/grocery_data/)) is loaded into Pinecone ([`pinecone/preload_vector_data.py`](pinecone/preload_vector_data.py)).
 * You can test the Retrieval-Augmented Generation (RAG) setup by searching for groceries ([`pinecone/search_groceries.py`](pinecone/search_groceries.py)).
 
@@ -70,53 +70,10 @@ Requires [uv](https://github.com/astral-sh/uv) to manage dependencies and run co
 This application uses Pinecone for vector storage and retrieval (RAG). You need to run a local instance using Docker:
 
 ```bash
-cd pinecone
-docker compose up -d
+# Runs docker compose using the file in the pinecone/ directory
+docker compose -f pinecone/docker-compose.yaml up -d
 ```
 
 Load the sample grocery data (located in `pinecone/grocery_data`):
 
-```bash
-# Runs the script within the uv-managed environment
-uv run python pinecone/preload_vector_data.py
 ```
-
-You can test the Retrieval-Augmented Generation (RAG) setup by searching for groceries:
-
-```bash
-uv run python pinecone/search_groceries.py "milk"
-uv run python pinecone/search_groceries.py "citrus"
-```
-
-And you should see results!
-
-### Running the Workflow
-
-Run the following commands in separate terminal windows:
-
-1. Start the Temporal worker:
-```bash
-uv run python -m scripts.run_worker
-```
-
-2. Start the Temporal workflow:
-```bash
-uv run python -m scripts.run_workflow
-```
-
-* Workflow runs with stubbed (no nothing) activities for now.
-
-## TODO
-Things I'm doing next
-- [ ] Replace Ollama calls with OpenAI calls in workflow
-- [ ] Ensure old Chroma DB activities are now working Pinecone ones
-These will enable the Python port of the workflow to run.
-
-Then I'll add the following:
-- [x] Combine grocery store vector data into a single vector index
-- [x] Reduce cardinality of vector data
-- [ ] Schedule for updating vector data
-- [ ] Notification workflow when a deal is found
-- [ ] Web UI (port of Anthony's existing one + chat functionality?)
-- [ ] Other (currently under discussion!)
-- [x] And (of course) clean up the old agent code and make this its own repo!
