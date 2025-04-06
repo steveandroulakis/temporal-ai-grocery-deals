@@ -3,7 +3,7 @@ import uuid
 from temporalio.client import Client
 
 # Import the workflow definition and its input type
-from workflows.deal_finder import DealFinderWorkflow, RetrieveItemWorkflowRequest
+from workflows.deal_finder_workflow import DealFinderWorkflow, RetrieveItemWorkflowRequest
 
 from shared.config import get_temporal_client, TEMPORAL_TASK_QUEUE
 

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from temporalio.worker import Worker
 
 # Import the Deal Finder workflow and activities
-from workflows.deal_finder import DealFinderWorkflow
+from workflows.deal_finder_workflow import DealFinderWorkflow
 from activities.deal_finder_activities import DealFinderActivities
 
 from shared.config import get_temporal_client, TEMPORAL_TASK_QUEUE
