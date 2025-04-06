@@ -53,7 +53,7 @@ This runs a Python version of the [Typescript-based retrieveFood workflow](https
 
 Requires [uv](https://github.com/astral-sh/uv) to manage dependencies and run commands within the project environment.
 
-1. Ensure `uv` is installed (see [uv installation guide](https://docs.astral.sh/uv/install/)).
+1. Ensure `uv` is installed.
 2. Install project dependencies:
    ```bash
    # Installs dependencies from uv.lock into the virtual environment (.venv)
