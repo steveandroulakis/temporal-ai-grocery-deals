@@ -33,11 +33,11 @@ async def main():
     # --- Define the input for the DealFinderWorkflow ---
     # Use the query from arguments
     workflow_input = RetrieveItemWorkflowRequest(
-        llmEmbeddingModel="text-embedding-3-small", # OpenAI embedding model
-        llmModel="gpt-4o" , # OpenAI LLM
+        llm_embedding_model="text-embedding-3-small", # OpenAI embedding model (snake_case)
+        llm_model="gpt-4o" , # OpenAI LLM (snake_case)
         query=query_to_use, # Use query from args
-        # Example PineconeDB index names (e.g., store names) - Use exact names from data
-        pineconeDBIndexes=["Safeway", "Trader Joe's", "Whole Foods"] # Changed store names
+        # Use snake_case key and more descriptive name
+        store_filter_tags=["Safeway", "Trader Joe's", "Whole Foods"] # Changed store names
     )
 
     # Generate a unique ID for this workflow execution
@@ -45,7 +45,7 @@ async def main():
 
     print(f"Starting DealFinderWorkflow with ID: {workflow_id}")
     print(f"Input Query: {workflow_input['query']}")
-    print(f"Indexes (Store Tags): {workflow_input['pineconeDBIndexes']}") # Updated print label
+    print(f"Indexes (Store Tags): {workflow_input['store_filter_tags']}") 
 
     try:
         # Start the workflow execution
