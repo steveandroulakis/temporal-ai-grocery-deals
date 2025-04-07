@@ -86,118 +86,71 @@ class DealFinderWorkflow:
         )
         query_embedding = embedding_result['embeddings']
 
-        # 2. Query the single index for each store filter in parallel
-        workflow.logger.info(f"Querying single index in parallel with store filters: {store_filter_tags}")
-        pinecone_query_tasks = []
-        for store_tag in store_filter_tags:
-            task = workflow.execute_activity(
-                DealFinderActivities.pinecone_query,
-                # Pass arguments positionally: embeddings, n_results (using default 10), store_tag
-                args=[query_embedding, 10, store_tag],
-                **activity_options
-            )
-            pinecone_query_tasks.append(task)
+        async def process_single_store(store_tag, query_embedding, llm_model, query):
+            try:
+                # 1. Pinecone Query for this store
+                pinecone_result = await workflow.execute_activity(
+                    DealFinderActivities.pinecone_query,
+                    args=[query_embedding, 10, store_tag],
+                    **activity_options
+                )
+                possible_items = pinecone_result.get('documents', [[]])[0]
+                metadata = pinecone_result.get('metadatas', [[]])[0]
+                if isinstance(pinecone_result, Exception):
+                    workflow.logger.error(f"Failed to query with store filter {store_tag}: {pinecone_result}")
+                    return {"results": [], "collection": store_tag, "error": True}
 
-        # Gather results, handling potential errors for individual activities
-        pinecone_results = await asyncio.gather(*pinecone_query_tasks, return_exceptions=True)
+                # 2. LLM Generation (if items found)
+                if possible_items:
+                    # Format the items clearly for the LLM
+                    formatted_items_list = "\n".join([f"- {item}" for item in possible_items])
+                    llm_prompt = (
+                        f"You are an AI assistant tasked with extracting relevant grocery items and their prices from a list based on a user query.\\n"
+                        f"User query: \"{query}\"\\n\\n"
+                        f"Below is a list of potential grocery items retrieved for this query. Each item string might contain the name, size/quantity, and price/deal information.\\n"
+                        f"{formatted_items_list}\\n\\n" # Use the clearly formatted list
+                        f"Instructions:\\n"
+                        f"1. Carefully review the 'User query'.\\n"
+                        f"2. From the list above, identify ONLY the items that are directly relevant to the 'User query'.\\n"
+                        f"3. For each relevant item, extract its primary name and its price (as a string, e.g., '1.99' or '5.49/lb'). \\n"
+                        f"   - Extract the price value found within the item string. If a price isn't clearly available for an item, use null for the price field.\\n"
+                        f"   - Extract just the core name of the item, omitting sizes or secondary details unless crucial for identification.\\n"
+                        f"4. Respond with a JSON array of objects. Each object must have two keys: 'name' (string) and 'price' (string or null).\\n"
+                        f"5. If NONE of the items in the list are relevant to the query, return an empty JSON array ([])."
+                    )
 
-        query_results_by_store = {}
-        for i, store_tag in enumerate(store_filter_tags):
-            result = pinecone_results[i]
-            if isinstance(result, Exception):
-                workflow.logger.error(f"Failed to query with store filter {store_tag}: {result}")
-                query_results_by_store[store_tag] = {"metadata": [], "possibleItems": []}
-            else:
-                # Store results keyed by the store tag
-                possible_items = result.get('documents', [[]])[0]
-                metadata = result.get('metadatas', [[]])[0]
-                query_results_by_store[store_tag] = {
-                    "metadata": metadata,
-                    "possibleItems": possible_items
-                }
-                workflow.logger.info(f"Query successful for store filter: {store_tag}")
+                    # Define the expected JSON schema
+                    llm_output_schema = {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "price": {"type": ["string", "null"]}
+                            },
+                            "required": ["name", "price"]
+                        }
+                    }
 
+                    workflow.logger.info(f"Preparing LLM task for store filter: {store_tag}")
+                    llm_result = await workflow.execute_activity(
+                        DealFinderActivities.llm_generate,
+                        args=[llm_model, llm_prompt, "You are a helpful AI assistant. Respond ONLY with the requested JSON.", llm_output_schema],
+                        **activity_options
+                    )
+                    return {"results": llm_result['response'], "collection": store_tag}
+                else:
+                    # No items from Pinecone
+                    return {"results": [], "collection": store_tag}
 
-        # 3. Augment results and generate final output using LLM in parallel
-        workflow.logger.info("Processing filtered results with LLM in parallel...")
-        llm_tasks = []
-        store_tags_for_llm = [] # Keep track of which tag corresponds to which task
+            except Exception as e:
+                workflow.logger.error(f"Error processing store {store_tag}: {e}")
+                return {"results": [], "collection": store_tag, "error": True} # Mark error
 
-        # Prepare LLM tasks for stores with results
-        for store_tag, query_data in query_results_by_store.items():
-            possible_items = query_data.get('possibleItems', [])
-            metadata_list = query_data.get('metadata', []) # Keep metadata in case needed later, though not used in prompt
+        store_processing_tasks = [
+            process_single_store(tag, query_embedding, llm_model, query)
+            for tag in store_filter_tags
+        ]
 
-            if not possible_items:
-                workflow.logger.warning(f"No possible items found from PineconeDB query for store filter {store_tag}. Skipping LLM step.")
-                continue # Skip LLM if no items
-
-            # Format the items clearly for the LLM
-            formatted_items_list = "\n".join([f"- {item}" for item in possible_items])
-            llm_prompt = (
-                f"You are an AI assistant tasked with extracting relevant grocery items and their prices from a list based on a user query.\\n"
-                f"User query: \"{query}\"\\n\\n"
-                f"Below is a list of potential grocery items retrieved for this query. Each item string might contain the name, size/quantity, and price/deal information.\\n"
-                f"{formatted_items_list}\\n\\n" # Use the clearly formatted list
-                f"Instructions:\\n"
-                f"1. Carefully review the 'User query'.\\n"
-                f"2. From the list above, identify ONLY the items that are directly relevant to the 'User query'.\\n"
-                f"3. For each relevant item, extract its primary name and its price (as a string, e.g., '1.99' or '5.49/lb'). \\n"
-                f"   - Extract the price value found within the item string. If a price isn't clearly available for an item, use null for the price field.\\n"
-                f"   - Extract just the core name of the item, omitting sizes or secondary details unless crucial for identification.\\n"
-                f"4. Respond with a JSON array of objects. Each object must have two keys: 'name' (string) and 'price' (string or null).\\n"
-                f"5. If NONE of the items in the list are relevant to the query, return an empty JSON array ([])."
-            )
-
-            # Define the expected JSON schema (same as before)
-            llm_output_schema = {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string"},
-                        "price": {"type": ["string", "null"]}
-                    },
-                    "required": ["name", "price"]
-                }
-            }
-
-            workflow.logger.info(f"Preparing LLM task for store filter: {store_tag}")
-            task = workflow.execute_activity(
-                DealFinderActivities.llm_generate,
-                args=[llm_model, llm_prompt, "You are a helpful AI assistant. Respond ONLY with the requested JSON.", llm_output_schema],
-                **activity_options
-            )
-            llm_tasks.append(task)
-            store_tags_for_llm.append(store_tag) # Associate task with its store tag
-
-        # Gather LLM results, handling potential errors
-        final_results_per_index: AllStoreResultsWorkflowResponse = []
-        if llm_tasks:
-             llm_results = await asyncio.gather(*llm_tasks, return_exceptions=True)
-
-             # Process LLM results
-             for i, store_tag in enumerate(store_tags_for_llm):
-                 result = llm_results[i]
-                 if isinstance(result, Exception):
-                     workflow.logger.error(f"Error processing LLM results for store filter {store_tag}: {result}")
-                     final_results_per_index.append({
-                         "results": [],
-                         "collection": store_tag
-                     })
-                 else:
-                     llm_extracted_items = result['response']
-                     final_results_per_index.append({
-                         "results": llm_extracted_items,
-                         "collection": store_tag
-                     })
-                     workflow.logger.info(f"Successfully processed LLM results for store filter: {store_tag}")
-        else:
-            workflow.logger.info("No LLM tasks to execute.")
-
-        workflow.logger.info("DealFinderWorkflow finished.")
-        # Ensure the order matches the input `store_filter_tags` if necessary, or return as is.
-        # Current implementation returns results in the order LLM tasks finished/failed.
-        # If specific order is needed, sort `final_results_per_index` based on `store_filter_tags`.
-        # For now, returning as is.
+        final_results_per_index = await asyncio.gather(*store_processing_tasks)
         return final_results_per_index
