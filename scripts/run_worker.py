@@ -31,7 +31,6 @@ async def main():
 
     # Prepare the list of activity methods from the instance
     activities_list = [
-        deal_finder_activities.json_repair,
         deal_finder_activities.llm_embed,
         deal_finder_activities.llm_generate,
         deal_finder_activities.pinecone_query,
@@ -56,4 +55,9 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("Worker interrupted. Shutting down.")
+        # Optionally add any other specific cleanup here if needed
+        pass # Exit gracefully 

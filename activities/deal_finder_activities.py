@@ -8,6 +8,10 @@ from pinecone.grpc import PineconeGRPC as Pinecone, GRPCClientConfig
 from pinecone import Index, QueryResponse
 # Import OpenAI client
 from openai import OpenAI, OpenAIError
+# Import the new parsing utility
+from helpers.parsing_utils import parse_llm_json_response
+# Import the new host utility
+from helpers.host_utils import determine_pinecone_host
 
 # Define placeholder types based on TypeScript usage
 # Refined PineconeIndex type
@@ -53,7 +57,12 @@ class DealFinderActivities:
             activity.logger.error("PINECONE_INDEX_NAME environment variable not set.")
             raise ValueError("PINECONE_INDEX_NAME environment variable not set.")
 
-        pinecone_grpc_host = self._determine_pinecone_host(self.pinecone_index_name)
+        # Determine host using the helper function
+        pinecone_grpc_host = determine_pinecone_host(
+            index_name=self.pinecone_index_name,
+            docker_compose_path=DOCKER_COMPOSE_PATH,
+            logger=activity.logger
+        )
 
         activity.logger.info(f"Connecting to Pinecone index '{self.pinecone_index_name}' via gRPC at {pinecone_grpc_host}...")
         self.pinecone_index: Optional[PineconeIndex] = None
@@ -81,56 +90,6 @@ class DealFinderActivities:
 
         activity.logger.info("DealFinderActivities initialization complete.")
 
-
-    def _determine_pinecone_host(self, index_name: str) -> str:
-        """Helper method to determine Pinecone host from docker-compose."""
-        # Find docker-compose path relative to likely workspace root
-        docker_compose_abs_path = os.path.abspath(DOCKER_COMPOSE_PATH)
-        if not os.path.exists(docker_compose_abs_path):
-            script_dir = os.path.dirname(__file__)
-            rel_path = os.path.join(script_dir, '..', DOCKER_COMPOSE_PATH)
-            docker_compose_abs_path = os.path.abspath(rel_path)
-            if not os.path.exists(docker_compose_abs_path):
-                activity.logger.error(f"docker-compose.yaml not found at {DOCKER_COMPOSE_PATH} or relative path. Cannot determine port.")
-                raise FileNotFoundError("docker-compose.yaml not found, cannot determine Pinecone port.")
-
-        # Load docker-compose and extract port
-        pinecone_grpc_host = None
-        try:
-            with open(docker_compose_abs_path, 'r') as f:
-                config = yaml.safe_load(f)
-            if not config or 'services' not in config or index_name not in config['services']:
-                raise ValueError(f"Invalid docker-compose file or service '{index_name}' not found.")
-            service_config = config['services'][index_name]
-            if 'ports' in service_config and service_config['ports']:
-                port_mapping = service_config['ports'][0]
-                port = int(port_mapping.split(':')[0]) # Get the host port
-                pinecone_grpc_host = f"localhost:{port}"
-                activity.logger.info(f"Determined Pinecone gRPC host from docker-compose: {pinecone_grpc_host}")
-            else:
-                raise ValueError(f"No port mapping found for service '{index_name}'.")
-        except (yaml.YAMLError, ValueError, IndexError, TypeError, FileNotFoundError) as e:
-            activity.logger.error(f"Error reading docker-compose or extracting port: {e}")
-            raise
-
-        if not pinecone_grpc_host:
-             activity.logger.error("Failed to determine pinecone_grpc_host.")
-             raise ValueError("Failed to determine pinecone_grpc_host.")
-
-        return pinecone_grpc_host
-
-
-    @activity.defn
-    async def json_repair(self, json_str: str) -> str:
-        """
-        Stub for the jsonRepair activity.
-        Repairs a potentially invalid JSON string.
-        """
-        # In a real implementation, this would call a JSON repair library.
-        # For now, it returns an empty JSON object string as a placeholder.
-        activity.logger.info(f"Stub json_repair called with input length: {len(json_str)}")
-        activity.logger.info("json_repair is currently a passthrough stub and not implemented.")
-        return json_str
 
     @activity.defn
     async def llm_embed(self, model: str, input_text: str) -> Dict[str, List[float]]:
@@ -205,65 +164,17 @@ class DealFinderActivities:
             
             if response_content is None:
                  activity.logger.warning("OpenAI returned None content.")
-                 response_content = "[]" # Default to empty JSON array string if OpenAI returns None
+                 response_content = "" # Default to empty string if OpenAI returns None
             else:
                 # Minimal cleaning - just strip whitespace
                 response_content = response_content.strip()
-                activity.logger.info(f"Returning stripped response content with length {len(response_content)}")
+                activity.logger.info(f"Stripped response content length {len(response_content)} before parsing.")
                 # NOTE: Removed complex JSON cleaning/parsing/re-serialization block.
                 # The workflow is now responsible for parsing this string (which should be JSON).
 
-            # --- Attempt to parse the LLM response string into a Python list --- START
-            parsed_response: List[Dict[str, Any]] = [] # Default to empty list
-            try:
-                parsed_obj = json.loads(response_content)
-
-                if isinstance(parsed_obj, list):
-                    # Handles [...] and []
-                    # Check if all items are dicts and have the required keys
-                    if all(isinstance(item, dict) and 'name' in item and 'price' in item for item in parsed_obj):
-                        parsed_response = parsed_obj
-                        activity.logger.info(f"Successfully parsed LLM response into a list of {len(parsed_response)} dicts.")
-                    else:
-                        activity.logger.warning("Parsed JSON list did not contain only dictionaries with 'name' and 'price' keys. Returning empty list.")
-                        parsed_response = [] # Keep strict: require name/price
-
-                elif isinstance(parsed_obj, dict):
-                    # Handles the case where LLM returns just one item as an object {}
-                    if 'name' in parsed_obj and 'price' in parsed_obj:
-                        activity.logger.info("Parsed LLM response as a single dictionary, wrapping it in a list.")
-                        parsed_response = [parsed_obj]
-                    else:
-                        # NEW: Check if dict contains a key whose value is the desired list of dicts
-                        found_list_in_dict = False
-                        for key, value in parsed_obj.items():
-                            # Check if the value is a list, and all its items are dicts with 'name' and 'price'
-                            if isinstance(value, list) and all(isinstance(item, dict) and 'name' in item and 'price' in item for item in value):
-                                activity.logger.info(f"Found expected list of dicts under key '{key}' in the response object.")
-                                parsed_response = value
-                                found_list_in_dict = True
-                                break # Use the first suitable list found
-                        
-                        if not found_list_in_dict:
-                           activity.logger.warning("Parsed dictionary object was not a single item with name/price and did not contain a recognized nested list of items. Returning empty list.")
-                           parsed_response = []
-
-                # Commenting out the very specific nested string case for simplicity unless proven necessary
-                # elif isinstance(parsed_obj, list) and len(parsed_obj) == 1 and isinstance(parsed_obj[0], str):
-                #    ... (removed nested parsing logic) ...
-
-                else:
-                    # If it's not a list or a dict we can handle, log warning and return empty
-                    activity.logger.warning(f"LLM JSON response was not a list or a recognized dictionary structure (Type: {type(parsed_obj)}). Returning empty list.")
-                    parsed_response = [] # Explicitly set default
-
-            except json.JSONDecodeError as json_err:
-                activity.logger.error(f"Failed to parse LLM response string as JSON: {json_err}. Response: {response_content}")
-                parsed_response = [] # Ensure [] on JSON error
-            except Exception as e:
-                 activity.logger.error(f"Unexpected error during final response parsing: {e}. Returning empty list.")
-                 parsed_response = [] # Ensure [] on other errors
-            # --- Attempt to parse the LLM response string into a Python list --- END
+            # --- Attempt to parse the LLM response string into a Python list using the utility --- START
+            parsed_response = parse_llm_json_response(response_content, activity.logger)
+            # --- Attempt to parse the LLM response string into a Python list using the utility --- END
 
             # Return the parsed Python list (or empty list on failure)
             return {"response": parsed_response}
@@ -354,6 +265,3 @@ class DealFinderActivities:
             activity.logger.error(f"Error querying Pinecone index '{index_name}': {e}")
             # Return empty results on error to allow workflow to potentially continue
             return {"documents": [[]], "metadatas": [[]]}
-
-# Note: The type GroceryItemPineconeDBMetaSchema is a placeholder.
-# For production, define a specific Pydantic model for metadata structure. 

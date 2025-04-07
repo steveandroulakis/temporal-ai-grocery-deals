@@ -3,7 +3,6 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from datetime import timedelta
 from typing import List, Dict, Any, TypedDict
-import json
 
 # Import activities
 with workflow.unsafe.imports_passed_through():
