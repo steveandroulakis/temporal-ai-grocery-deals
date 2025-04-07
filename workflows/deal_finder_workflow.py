@@ -195,19 +195,6 @@ class DealFinderWorkflow:
         else:
             workflow.logger.info("No LLM tasks to execute.")
 
-        # Add results for stores that were skipped in LLM step
-        processed_store_tags = {res['collection'] for res in final_results_per_index}
-        for store_tag in store_filter_tags:
-            if store_tag not in processed_store_tags:
-                # Check if it had items but failed pinecone, or had no items
-                if not query_results_by_store[store_tag].get('possibleItems'):
-                     workflow.logger.info(f"Adding empty result for store filter {store_tag} (skipped LLM due to no pinecone results).")
-                     final_results_per_index.append({
-                        "results": [],
-                        "collection": store_tag
-                    })
-                # Note: Cases where pinecone failed are already handled by the initial check
-
         workflow.logger.info("DealFinderWorkflow finished.")
         # Ensure the order matches the input `store_filter_tags` if necessary, or return as is.
         # Current implementation returns results in the order LLM tasks finished/failed.
